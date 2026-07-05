@@ -15,16 +15,16 @@ class GeminiAIClient:
         if not self._client:
             raise RuntimeError("Gemini API key is not configured")
 
-        interaction = self._client.interactions.create(
+        response = self._client.models.generate_content(
             model=settings.gemini_model,
-            input=(
+            contents=(
                 "You are a helpful assistant in a LINE group chat. "
                 "Reply in concise Traditional Chinese. "
                 "If the user asks for something unsafe or illegal, refuse briefly.\n\n"
                 f"User message: {prompt}"
             ),
         )
-        return interaction.output_text.strip()
+        return (response.text or "").strip()
 
 
 gemini_ai_client = GeminiAIClient()
