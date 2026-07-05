@@ -4,6 +4,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from src.ai_client import gemini_ai_client
+from src.config import settings
 from src.handlers.reply_rules import build_rule_based_reply
 from src.line_client import line_client
 
@@ -49,7 +51,17 @@ async def handle_event(event: dict) -> None:
         await line_client.reply_text(reply_token, rule_reply)
         return
 
-    # Group reply policy: only reply to known commands or keywords.
+    ai_prompt = extract_ai_prompt(message, text)
+    if ai_prompt:
+        if not gemini_ai_client.enabled:
+            await line_client.reply_text(reply_token, "AI 功能尚未設定完成，請先設定 Gemini API key。")
+            return
+
+        ai_reply = gemini_ai_client.generate_reply(ai_prompt)
+        await line_client.reply_text(reply_token, ai_reply or "我現在暫時想不到要怎麼回答。")
+        return
+
+    # Group reply policy: only reply to known commands, keywords, image meal events, or AI triggers.
     # Keep the echo behavior here for quick re-enable later.
     # await line_client.reply_text(reply_token, f"{display_name} 說：{text}")
     return
@@ -89,3 +101,55 @@ def build_photo_meal_reply(display_name: str, now: datetime | None = None) -> st
         meal_text = "吃消夜了"
 
     return f"{display_name} {meal_text}"
+
+
+def extract_ai_prompt(message: dict, text: str) -> str | None:
+    stripped_text = text.strip()
+    lowered_text = stripped_text.lower()
+
+    if lowered_text.startswith("/ask"):
+        prompt = stripped_text[4:].strip()
+        return prompt or "請介紹你自己。"
+
+    if is_bot_mentioned(message):
+        prompt = remove_mention_ranges(text, message.get("mention", {}).get("mentionees", [])).strip()
+        return prompt or "請介紹你自己。"
+
+    return None
+
+
+def is_bot_mentioned(message: dict) -> bool:
+    bot_user_id = settings.line_bot_user_id
+    if not bot_user_id:
+        return False
+
+    mention = message.get("mention") or {}
+    mentionees = mention.get("mentionees") or []
+
+    for mentionee in mentionees:
+        if mentionee.get("type") == "user" and mentionee.get("userId") == bot_user_id:
+            return True
+
+    return False
+
+
+def remove_mention_ranges(text: str, mentionees: list[dict]) -> str:
+    ranges: list[tuple[int, int]] = []
+    for mentionee in mentionees:
+        start = mentionee.get("index")
+        length = mentionee.get("length")
+        if isinstance(start, int) and isinstance(length, int):
+            ranges.append((start, start + length))
+
+    if not ranges:
+        return text
+
+    parts: list[str] = []
+    cursor = 0
+    for start, end in sorted(ranges):
+        if cursor < start:
+            parts.append(text[cursor:start])
+        cursor = max(cursor, end)
+    if cursor < len(text):
+        parts.append(text[cursor:])
+    return " ".join(part.strip() for part in parts if part.strip())

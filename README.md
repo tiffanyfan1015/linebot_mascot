@@ -7,8 +7,9 @@ Python + FastAPI LINE Bot starter for Cloud Run.
 - `POST /webhook` for LINE Messaging API.
 - LINE `x-line-signature` validation.
 - Replies when the bot joins a group.
-- Echoes group text messages with the sender display name.
-- Basic rule replies for `/help`, `/ping`, `早安`, and `開會`.
+- Rule replies for `/help`, `/ping`, `早安`, and `開會`.
+- Image meal replies based on Taiwan time.
+- Gemini AI replies when the bot is mentioned or when a message starts with `/ask`.
 - `GET /healthz` for deployment checks.
 
 ## Required Environment Variables
@@ -20,6 +21,17 @@ LINE_CHANNEL_SECRET=replace-with-your-channel-secret
 LINE_CHANNEL_ACCESS_TOKEN=replace-with-your-channel-access-token
 PORT=8080
 ```
+
+## Optional AI Environment Variables
+
+```env
+GEMINI_API_KEY=replace-with-your-gemini-api-key
+LINE_BOT_USER_ID=replace-with-your-line-bot-user-id
+GEMINI_MODEL=gemini-3.1-flash-lite
+```
+
+`LINE_BOT_USER_ID` is used to detect when users mention the bot in a group.
+If `GEMINI_API_KEY` is not set, the AI feature stays disabled and the rest of the bot still works.
 
 ## Local Development
 
@@ -79,4 +91,5 @@ Then enable `Use webhook` and click `Verify` in LINE Developers Console.
 ## Security Notes
 
 - `.env` files are ignored.
-- Keep `LINE_CHANNEL_ACCESS_TOKEN` and `LINE_CHANNEL_SECRET` only in Cloud Run environment variables or Secret Manager.
+- Keep secrets only in Cloud Run environment variables or Secret Manager.
+- Do not expose `GEMINI_API_KEY` in client-side code.
