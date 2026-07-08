@@ -71,13 +71,7 @@ async def handle_event(event: dict) -> None:
 
 
 async def handle_image_message(reply_token: str, message: dict, display_name: str) -> None:
-    logger.info(
-        "Received LINE image message",
-        extra={
-            "line_image_message": message,
-            "line_image_message_json": json.dumps(message, ensure_ascii=False),
-        },
-    )
+    logger.info("Received LINE image message payload=%s", json.dumps(message, ensure_ascii=False))
 
     if not gemini_ai_client.enabled:
         logger.info("Skipping image food classification because Gemini is not configured")
@@ -91,12 +85,10 @@ async def handle_image_message(reply_token: str, message: dict, display_name: st
     try:
         image_bytes, mime_type = await line_client.get_message_content(message_id)
         logger.info(
-            "Fetched LINE image content",
-            extra={
-                "line_message_id": message_id,
-                "mime_type": mime_type,
-                "image_size_bytes": len(image_bytes),
-            },
+            "Fetched LINE image content: message_id=%s mime_type=%s size=%s",
+            message_id,
+            mime_type,
+            len(image_bytes),
         )
         is_food = gemini_ai_client.is_food_image(image_bytes, mime_type)
     except AIServiceError:
@@ -104,11 +96,9 @@ async def handle_image_message(reply_token: str, message: dict, display_name: st
         return
     except httpx.HTTPError:
         logger.exception(
-            "Failed to fetch LINE image content in image handler",
-            extra={
-                "line_message_id": message_id,
-                "line_image_message_json": json.dumps(message, ensure_ascii=False),
-            },
+            "Failed to fetch LINE image content in image handler: message_id=%s payload=%s",
+            message_id,
+            json.dumps(message, ensure_ascii=False),
         )
         return
 

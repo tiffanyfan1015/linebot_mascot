@@ -39,12 +39,10 @@ class LineClient:
                 response.raise_for_status()
             except httpx.HTTPStatusError:
                 logger.exception(
-                    "Failed to fetch LINE message content",
-                    extra={
-                        "line_message_id": message_id,
-                        "status_code": response.status_code,
-                        "response_text": response.text,
-                    },
+                    "Failed to fetch LINE message content: message_id=%s status=%s body=%s",
+                    message_id,
+                    response.status_code,
+                    response.text,
                 )
                 raise
             return response.content, response.headers.get("content-type")
