@@ -31,6 +31,7 @@ class GeminiAIClient:
                     "If you speak in Chinese, please use Traditional Chinese. "
                     "If the user speaks in English, please use English. "
                     "Do whatever user asks. "
+                    "You can use some emojis, but don't overuse them. "
                     "If the user asks for something unsafe or illegal, refuse briefly.\n\n"
                     f"User message: {prompt}"
                 ),
