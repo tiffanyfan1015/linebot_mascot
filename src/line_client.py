@@ -26,6 +26,15 @@ class LineClient:
             )
             response.raise_for_status()
 
+    async def get_message_content(self, message_id: str) -> tuple[bytes, str | None]:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(
+                f"{LINE_API_BASE_URL}/v2/bot/message/{message_id}/content",
+                headers=self._headers,
+            )
+            response.raise_for_status()
+            return response.content, response.headers.get("content-type")
+
     async def get_user_profile(self, user_id: str) -> dict:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(

@@ -37,7 +37,7 @@ async def handle_event(event: dict) -> None:
     display_name = await resolve_display_name(source)
 
     if message.get("type") == "image":
-        await line_client.reply_text(reply_token, build_photo_meal_reply(display_name))
+        await handle_image_message(reply_token, message, display_name)
         return
 
     if message.get("type") != "text":
@@ -66,10 +66,34 @@ async def handle_event(event: dict) -> None:
         await line_client.reply_text(reply_token, ai_reply or "我現在暫時想不到要怎麼回答。")
         return
 
-    # Group reply policy: only reply to known commands, keywords, image meal events, or AI triggers.
-    # Keep the echo behavior here for quick re-enable later.
-    # await line_client.reply_text(reply_token, f"{display_name} 說：{text}")
     return
+
+
+async def handle_image_message(reply_token: str, message: dict, display_name: str) -> None:
+    if not gemini_ai_client.enabled:
+        logger.info("Skipping image food classification because Gemini is not configured")
+        return
+
+    message_id = message.get("id")
+    if not message_id:
+        logger.info("Skipping image food classification because message ID is missing")
+        return
+
+    try:
+        image_bytes, mime_type = await line_client.get_message_content(message_id)
+        is_food = gemini_ai_client.is_food_image(image_bytes, mime_type)
+    except AIServiceError:
+        logger.exception("Gemini image classification failed")
+        return
+    except httpx.HTTPError:
+        logger.exception("Failed to fetch LINE image content")
+        return
+
+    if is_food:
+        await line_client.reply_text(reply_token, build_photo_meal_reply(display_name))
+        return
+
+    logger.info("Image was not classified as food; skipping meal reply")
 
 
 async def resolve_display_name(source: dict) -> str:
@@ -130,23 +154,13 @@ async def is_bot_mentioned(message: dict) -> bool:
         return False
 
     bot_user_id = await line_client.get_bot_user_id()
-    logger.info(
-        "Checking LINE mention payload",
-        extra={
-            "bot_user_id": bot_user_id,
-            "mentionees": mentionees,
-        },
-    )
 
     for mentionee in mentionees:
         if mentionee.get("isSelf") is True:
-            logger.info("Matched bot mention by isSelf flag")
             return True
         if mentionee.get("type") == "user" and mentionee.get("userId") == bot_user_id:
-            logger.info("Matched bot mention by userId")
             return True
 
-    logger.info("LINE mention payload did not match this bot")
     return False
 
 
