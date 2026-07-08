@@ -4,8 +4,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from src.ai_client import gemini_ai_client
-from src.config import settings
+from src.ai_client import AIServiceError, gemini_ai_client
 from src.handlers.reply_rules import build_rule_based_reply
 from src.line_client import line_client
 
@@ -51,13 +50,19 @@ async def handle_event(event: dict) -> None:
         await line_client.reply_text(reply_token, rule_reply)
         return
 
-    ai_prompt = extract_ai_prompt(message, text)
+    ai_prompt = await extract_ai_prompt(message, text)
     if ai_prompt:
         if not gemini_ai_client.enabled:
             await line_client.reply_text(reply_token, "AI 功能尚未設定完成，請先設定 Gemini API key。")
             return
 
-        ai_reply = gemini_ai_client.generate_reply(ai_prompt)
+        try:
+            ai_reply = gemini_ai_client.generate_reply(ai_prompt)
+        except AIServiceError:
+            logger.exception("Gemini API request failed")
+            await line_client.reply_text(reply_token, "AI 服務目前暫時異常，請稍後再試。")
+            return
+
         await line_client.reply_text(reply_token, ai_reply or "我現在暫時想不到要怎麼回答。")
         return
 
@@ -103,7 +108,7 @@ def build_photo_meal_reply(display_name: str, now: datetime | None = None) -> st
     return f"{display_name} {meal_text}"
 
 
-def extract_ai_prompt(message: dict, text: str) -> str | None:
+async def extract_ai_prompt(message: dict, text: str) -> str | None:
     stripped_text = text.strip()
     lowered_text = stripped_text.lower()
 
@@ -111,25 +116,37 @@ def extract_ai_prompt(message: dict, text: str) -> str | None:
         prompt = stripped_text[4:].strip()
         return prompt or "請介紹你自己。"
 
-    if is_bot_mentioned(message):
+    if await is_bot_mentioned(message):
         prompt = remove_mention_ranges(text, message.get("mention", {}).get("mentionees", [])).strip()
         return prompt or "請介紹你自己。"
 
     return None
 
 
-def is_bot_mentioned(message: dict) -> bool:
-    bot_user_id = settings.line_bot_user_id
-    if not bot_user_id:
-        return False
-
+async def is_bot_mentioned(message: dict) -> bool:
     mention = message.get("mention") or {}
     mentionees = mention.get("mentionees") or []
+    if not mentionees:
+        return False
+
+    bot_user_id = await line_client.get_bot_user_id()
+    logger.info(
+        "Checking LINE mention payload",
+        extra={
+            "bot_user_id": bot_user_id,
+            "mentionees": mentionees,
+        },
+    )
 
     for mentionee in mentionees:
+        if mentionee.get("isSelf") is True:
+            logger.info("Matched bot mention by isSelf flag")
+            return True
         if mentionee.get("type") == "user" and mentionee.get("userId") == bot_user_id:
+            logger.info("Matched bot mention by userId")
             return True
 
+    logger.info("LINE mention payload did not match this bot")
     return False
 
 

@@ -12,6 +12,7 @@ class LineClient:
             "Authorization": f"Bearer {settings.line_channel_access_token}",
             "Content-Type": "application/json",
         }
+        self._bot_info_cache: dict | None = None
 
     async def reply_text(self, reply_token: str, text: str) -> None:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -51,6 +52,26 @@ class LineClient:
             )
             response.raise_for_status()
             return response.json()
+
+    async def get_bot_info(self) -> dict:
+        if self._bot_info_cache is not None:
+            return self._bot_info_cache
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                f"{LINE_API_BASE_URL}/v2/bot/info",
+                headers=self._headers,
+            )
+            response.raise_for_status()
+            self._bot_info_cache = response.json()
+            return self._bot_info_cache
+
+    async def get_bot_user_id(self) -> str | None:
+        if settings.line_bot_user_id:
+            return settings.line_bot_user_id
+
+        bot_info = await self.get_bot_info()
+        return bot_info.get("userId")
 
 
 line_client = LineClient()

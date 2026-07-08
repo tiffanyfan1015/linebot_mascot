@@ -1,6 +1,11 @@
 from google import genai
+from google.genai.errors import ClientError
 
 from src.config import settings
+
+
+class AIServiceError(Exception):
+    pass
 
 
 class GeminiAIClient:
@@ -15,15 +20,19 @@ class GeminiAIClient:
         if not self._client:
             raise RuntimeError("Gemini API key is not configured")
 
-        response = self._client.models.generate_content(
-            model=settings.gemini_model,
-            contents=(
-                "You are a helpful assistant in a LINE group chat. "
-                "Reply in concise Traditional Chinese. "
-                "If the user asks for something unsafe or illegal, refuse briefly.\n\n"
-                f"User message: {prompt}"
-            ),
-        )
+        try:
+            response = self._client.models.generate_content(
+                model=settings.gemini_model,
+                contents=(
+                    "You are a helpful assistant in a LINE group chat. "
+                    "Do whatever user asks. "
+                    "If the user asks for something unsafe or illegal, refuse briefly.\n\n"
+                    f"User message: {prompt}"
+                ),
+            )
+        except ClientError as exc:
+            raise AIServiceError(str(exc)) from exc
+
         return (response.text or "").strip()
 
 
