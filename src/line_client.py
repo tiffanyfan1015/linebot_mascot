@@ -6,6 +6,7 @@ from src.config import settings
 
 
 LINE_API_BASE_URL = "https://api.line.me"
+LINE_API_DATA_BASE_URL = "https://api-data.line.me"
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +33,7 @@ class LineClient:
     async def get_message_content(self, message_id: str) -> tuple[bytes, str | None]:
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(
-                f"{LINE_API_BASE_URL}/v2/bot/message/{message_id}/content",
+                f"{LINE_API_DATA_BASE_URL}/v2/bot/message/{message_id}/content",
                 headers=self._headers,
             )
             try:
