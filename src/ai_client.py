@@ -1,4 +1,6 @@
 import base64
+import json
+import logging
 
 import httpx
 from google import genai
@@ -7,8 +9,17 @@ from google.genai.errors import ClientError
 from src.config import settings
 
 
+logger = logging.getLogger(__name__)
+
+
 class AIServiceError(Exception):
     pass
+
+
+class ImageAnalysis:
+    def __init__(self, is_food: bool, description: str) -> None:
+        self.is_food = is_food
+        self.description = description
 
 
 class GeminiAIClient:
@@ -31,7 +42,6 @@ class GeminiAIClient:
                     "If you speak in Chinese, please use Traditional Chinese. "
                     "If the user speaks in English, please use English. "
                     "Do whatever user asks. "
-                    "You can use some emojis, but don't overuse them."
                     "If the user asks for something unsafe or illegal, refuse briefly.\n\n"
                     f"User message: {prompt}"
                 ),
@@ -42,8 +52,11 @@ class GeminiAIClient:
         return (response.text or "").strip()
 
     def is_food_image(self, image_bytes: bytes, mime_type: str | None) -> bool:
+        return self.analyze_image(image_bytes, mime_type).is_food
+
+    def analyze_image(self, image_bytes: bytes, mime_type: str | None) -> ImageAnalysis:
         if not settings.gemini_api_key:
-            return False
+            return ImageAnalysis(is_food=False, description="照片")
 
         detected_mime_type = mime_type or "image/jpeg"
         encoded_image = base64.b64encode(image_bytes).decode("utf-8")
@@ -57,8 +70,12 @@ class GeminiAIClient:
                     "parts": [
                         {
                             "text": (
-                                "Determine whether this image clearly shows food, a meal, or something meant to be eaten. "
-                                "Reply with YES or NO only."
+                                "Analyze this image for a LINE group chat bot. "
+                                "Return compact JSON only with this schema: "
+                                '{"is_food": boolean, "description": string}. '
+                                "Set is_food to true only if the image clearly shows food, a meal, or something meant to be eaten. "
+                                "Write description as a short Traditional Chinese noun phrase describing the main non-food subject. "
+                                "If the subject is unclear, use \"不太清楚內容\"."
                             )
                         },
                         {
@@ -76,11 +93,18 @@ class GeminiAIClient:
             response = httpx.post(url, json=payload, timeout=30)
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            raise AIServiceError("Gemini food classification request failed") from exc
+            raise AIServiceError("Gemini image classification request failed") from exc
 
         data = response.json()
-        text = extract_gemini_text(data).strip().upper()
-        return text.startswith("YES")
+        text = extract_gemini_text(data).strip()
+        analysis = parse_image_analysis(text)
+        logger.info(
+            "Gemini image analysis result: raw=%s is_food=%s description=%s",
+            text,
+            analysis.is_food,
+            analysis.description,
+        )
+        return analysis
 
 
 def extract_gemini_text(response_json: dict) -> str:
@@ -92,6 +116,35 @@ def extract_gemini_text(response_json: dict) -> str:
     parts = content.get("parts") or []
     texts = [part.get("text", "") for part in parts if isinstance(part, dict)]
     return "\n".join(texts)
+
+
+def parse_image_analysis(text: str) -> ImageAnalysis:
+    if not text:
+        return ImageAnalysis(is_food=False, description="不太清楚內容")
+
+    normalized_text = text.strip()
+    if normalized_text.startswith("```"):
+        normalized_text = normalized_text.strip("`").strip()
+        if normalized_text.lower().startswith("json"):
+            normalized_text = normalized_text[4:].strip()
+
+    try:
+        parsed = json.loads(normalized_text)
+    except json.JSONDecodeError:
+        upper_text = normalized_text.upper()
+        return ImageAnalysis(
+            is_food=upper_text.startswith("YES"),
+            description="不太清楚內容",
+        )
+
+    description = parsed.get("description")
+    if not isinstance(description, str) or not description.strip():
+        description = "不太清楚內容"
+
+    return ImageAnalysis(
+        is_food=parsed.get("is_food") is True,
+        description=description.strip(),
+    )
 
 
 gemini_ai_client = GeminiAIClient()

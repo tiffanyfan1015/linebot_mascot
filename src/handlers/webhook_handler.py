@@ -79,7 +79,7 @@ async def handle_image_message(reply_token: str, message: dict, display_name: st
 
     try:
         image_bytes, mime_type = await fetch_image_bytes(message)
-        is_food = gemini_ai_client.is_food_image(image_bytes, mime_type)
+        image_analysis = gemini_ai_client.analyze_image(image_bytes, mime_type)
     except AIServiceError:
         logger.exception("Gemini image classification failed")
         return
@@ -90,11 +90,11 @@ async def handle_image_message(reply_token: str, message: dict, display_name: st
         )
         return
 
-    if is_food:
+    if image_analysis.is_food:
         await line_client.reply_text(reply_token, build_photo_meal_reply(display_name))
         return
 
-    logger.info("Image was not classified as food; skipping meal reply")
+    await line_client.reply_text(reply_token, build_non_food_photo_reply(display_name, image_analysis.description))
 
 
 async def fetch_image_bytes(message: dict) -> tuple[bytes, str | None]:
@@ -155,6 +155,11 @@ async def resolve_display_name(source: dict) -> str:
         return "有人"
 
     return profile.get("displayName", "有人")
+
+
+def build_non_food_photo_reply(display_name: str, description: str) -> str:
+    cleaned_description = description.strip() or "不太清楚內容"
+    return f"{display_name} 傳了一張 {cleaned_description} 的照片"
 
 
 def build_photo_meal_reply(display_name: str, now: datetime | None = None) -> str:
