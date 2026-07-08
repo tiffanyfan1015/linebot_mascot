@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
@@ -70,6 +71,14 @@ async def handle_event(event: dict) -> None:
 
 
 async def handle_image_message(reply_token: str, message: dict, display_name: str) -> None:
+    logger.info(
+        "Received LINE image message",
+        extra={
+            "line_image_message": message,
+            "line_image_message_json": json.dumps(message, ensure_ascii=False),
+        },
+    )
+
     if not gemini_ai_client.enabled:
         logger.info("Skipping image food classification because Gemini is not configured")
         return
@@ -81,12 +90,26 @@ async def handle_image_message(reply_token: str, message: dict, display_name: st
 
     try:
         image_bytes, mime_type = await line_client.get_message_content(message_id)
+        logger.info(
+            "Fetched LINE image content",
+            extra={
+                "line_message_id": message_id,
+                "mime_type": mime_type,
+                "image_size_bytes": len(image_bytes),
+            },
+        )
         is_food = gemini_ai_client.is_food_image(image_bytes, mime_type)
     except AIServiceError:
         logger.exception("Gemini image classification failed")
         return
     except httpx.HTTPError:
-        logger.exception("Failed to fetch LINE image content")
+        logger.exception(
+            "Failed to fetch LINE image content in image handler",
+            extra={
+                "line_message_id": message_id,
+                "line_image_message_json": json.dumps(message, ensure_ascii=False),
+            },
+        )
         return
 
     if is_food:

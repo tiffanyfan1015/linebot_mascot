@@ -1,9 +1,12 @@
+import logging
+
 import httpx
 
 from src.config import settings
 
 
 LINE_API_BASE_URL = "https://api.line.me"
+logger = logging.getLogger(__name__)
 
 
 class LineClient:
@@ -32,7 +35,18 @@ class LineClient:
                 f"{LINE_API_BASE_URL}/v2/bot/message/{message_id}/content",
                 headers=self._headers,
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError:
+                logger.exception(
+                    "Failed to fetch LINE message content",
+                    extra={
+                        "line_message_id": message_id,
+                        "status_code": response.status_code,
+                        "response_text": response.text,
+                    },
+                )
+                raise
             return response.content, response.headers.get("content-type")
 
     async def get_user_profile(self, user_id: str) -> dict:
