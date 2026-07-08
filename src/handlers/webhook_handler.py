@@ -77,27 +77,15 @@ async def handle_image_message(reply_token: str, message: dict, display_name: st
         logger.info("Skipping image food classification because Gemini is not configured")
         return
 
-    message_id = message.get("id")
-    if not message_id:
-        logger.info("Skipping image food classification because message ID is missing")
-        return
-
     try:
-        image_bytes, mime_type = await line_client.get_message_content(message_id)
-        logger.info(
-            "Fetched LINE image content: message_id=%s mime_type=%s size=%s",
-            message_id,
-            mime_type,
-            len(image_bytes),
-        )
+        image_bytes, mime_type = await fetch_image_bytes(message)
         is_food = gemini_ai_client.is_food_image(image_bytes, mime_type)
     except AIServiceError:
         logger.exception("Gemini image classification failed")
         return
     except httpx.HTTPError:
         logger.exception(
-            "Failed to fetch LINE image content in image handler: message_id=%s payload=%s",
-            message_id,
+            "Failed to fetch image content in image handler: payload=%s",
             json.dumps(message, ensure_ascii=False),
         )
         return
@@ -107,6 +95,45 @@ async def handle_image_message(reply_token: str, message: dict, display_name: st
         return
 
     logger.info("Image was not classified as food; skipping meal reply")
+
+
+async def fetch_image_bytes(message: dict) -> tuple[bytes, str | None]:
+    content_provider = message.get("contentProvider") or {}
+    provider_type = content_provider.get("type")
+    original_content_url = content_provider.get("originalContentUrl")
+    message_id = message.get("id")
+
+    if provider_type == "external" and original_content_url:
+        image_bytes, mime_type = await line_client.get_external_content(original_content_url)
+        logger.info(
+            "Fetched external image content: url=%s mime_type=%s size=%s",
+            original_content_url,
+            mime_type,
+            len(image_bytes),
+        )
+        return image_bytes, mime_type
+
+    if not message_id:
+        raise httpx.HTTPError("LINE image message ID is missing")
+
+    try:
+        image_bytes, mime_type = await line_client.get_message_content(message_id)
+        logger.info(
+            "Fetched LINE image content: message_id=%s mime_type=%s size=%s",
+            message_id,
+            mime_type,
+            len(image_bytes),
+        )
+        return image_bytes, mime_type
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404 and original_content_url:
+            logger.info(
+                "LINE content fetch returned 404; falling back to originalContentUrl: message_id=%s url=%s",
+                message_id,
+                original_content_url,
+            )
+            return await line_client.get_external_content(original_content_url)
+        raise
 
 
 async def resolve_display_name(source: dict) -> str:

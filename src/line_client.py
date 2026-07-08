@@ -47,6 +47,21 @@ class LineClient:
                 raise
             return response.content, response.headers.get("content-type")
 
+    async def get_external_content(self, url: str) -> tuple[bytes, str | None]:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            response = await client.get(url)
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError:
+                logger.exception(
+                    "Failed to fetch external image content: url=%s status=%s body=%s",
+                    url,
+                    response.status_code,
+                    response.text[:500],
+                )
+                raise
+            return response.content, response.headers.get("content-type")
+
     async def get_user_profile(self, user_id: str) -> dict:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(
