@@ -10,7 +10,7 @@ Python + FastAPI LINE Bot starter for Cloud Run.
 - Rule replies for `/help`, `/ping`, `早安`, and `開會`.
 - Image meal replies based on Taiwan time.
 - Stores food image logs, including AI-estimated serving, calories, and macronutrients, in Firestore. Photo-based nutrition estimates are for reference only.
-- `POST /jobs/daily-summary` for scheduled LINE group meal summaries.
+- `POST /jobs/daily-summary` for scheduled LINE group meal summaries, with AI-generated daily titles and deterministic fallbacks.
 - Gemini AI replies when the bot is mentioned or when a message starts with `/ask`.
 - `GET /healthz` for deployment checks.
 

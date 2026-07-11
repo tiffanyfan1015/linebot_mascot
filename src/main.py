@@ -3,15 +3,23 @@ import logging
 
 from fastapi import FastAPI, Header, HTTPException, Request
 
+from src.ai_client import AIServiceError, gemini_ai_client
 from src.config import settings
 from src.handlers.webhook_handler import handle_events
 from src.line_client import line_client
 from src.meal_store import meal_store
-from src.summary import build_daily_summary, get_summary_date
+from src.summary import (
+    build_daily_summary,
+    build_daily_title_profiles,
+    get_summary_date,
+    map_daily_titles_to_users,
+    public_daily_title_profiles,
+)
 from src.security import verify_line_signature
 
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LINE Bot")
 
@@ -57,7 +65,16 @@ async def daily_summary(x_scheduler_secret: str = Header(default="")) -> dict[st
             continue
 
         meals = meal_store.list_meals_for_date(target_id, local_date)
-        summary_text = build_daily_summary(local_date, meals)
+        daily_titles: dict[str, str] = {}
+        if meals and gemini_ai_client.enabled:
+            profiles = build_daily_title_profiles(meals)
+            try:
+                generated_titles = gemini_ai_client.generate_daily_titles(public_daily_title_profiles(profiles))
+                daily_titles = map_daily_titles_to_users(profiles, generated_titles)
+            except AIServiceError:
+                logger.exception("Gemini daily title generation failed; using fallback titles")
+
+        summary_text = build_daily_summary(local_date, meals, daily_titles)
         await line_client.push_text(target_id, summary_text)
         sent_count += 1
 

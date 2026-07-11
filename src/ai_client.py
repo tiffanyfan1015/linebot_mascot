@@ -74,6 +74,46 @@ class GeminiAIClient:
 
         return (response.text or "").strip()
 
+    def generate_daily_titles(self, profiles: list[dict[str, Any]]) -> dict[str, str]:
+        if not self._client or not profiles:
+            return {}
+
+        participant_ids = {profile.get("participant_id") for profile in profiles if isinstance(profile.get("participant_id"), str)}
+        if not participant_ids:
+            return {}
+
+        prompt = (
+            "You create one playful, varied Traditional Chinese daily meal title for each anonymous LINE group participant. "
+            "Base every title only on the supplied meal records, food names, meal timing, and estimated nutrition totals. "
+            "Treat food diversity as variety of dishes, ingredients, and meal types, not merely the number of log entries. "
+            "Use warm, non-judgmental titles such as 食材探索家, 早餐活力王, 宵夜戰士, or 餐盤藝術家. "
+            "Do not make medical, body-weight, morality, or health claims. Do not use participant names. "
+            "Give every participant a different title when their records support it. Each title must be 2 to 12 Traditional Chinese characters, with no emoji or explanation. "
+            "Return JSON only: {\"titles\":[{\"participant_id\":string,\"title\":string}]}.\n\n"
+            f"Participants: {json.dumps(profiles, ensure_ascii=False, separators=(',', ':'))}"
+        )
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}"
+        )
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 1.2,
+                "responseMimeType": "application/json",
+            },
+        }
+
+        try:
+            response = httpx.post(url, json=payload, timeout=30)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise AIServiceError("Gemini daily title request failed") from exc
+
+        titles = parse_daily_titles(extract_gemini_text(response.json()), participant_ids)
+        logger.info("Gemini generated %s daily titles", len(titles))
+        return titles
+
     def is_food_image(self, image_bytes: bytes, mime_type: str | None) -> bool:
         return self.analyze_image(image_bytes, mime_type).is_food
 
@@ -149,15 +189,53 @@ def extract_gemini_text(response_json: dict) -> str:
     return "\n".join(texts)
 
 
-def parse_image_analysis(text: str) -> ImageAnalysis:
-    if not text:
-        return ImageAnalysis(is_food=False, description="不太清楚內容")
+def parse_daily_titles(text: str, participant_ids: set[str]) -> dict[str, str]:
+    normalized_text = strip_json_fence(text)
+    try:
+        parsed = json.loads(normalized_text)
+    except json.JSONDecodeError:
+        return {}
 
+    entries = parsed.get("titles") if isinstance(parsed, dict) else None
+    if not isinstance(entries, list):
+        return {}
+
+    titles: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        participant_id = entry.get("participant_id")
+        title = normalize_daily_title(entry.get("title"))
+        if isinstance(participant_id, str) and participant_id in participant_ids and title:
+            titles[participant_id] = title
+    return titles
+
+
+def normalize_daily_title(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    title = " ".join(value.split())
+    if not 2 <= len(title) <= 12:
+        return None
+    if any(ord(character) < 0x4E00 or ord(character) > 0x9FFF for character in title):
+        return None
+    return title
+
+
+def strip_json_fence(text: str) -> str:
     normalized_text = text.strip()
     if normalized_text.startswith("```"):
         normalized_text = normalized_text.strip("`").strip()
         if normalized_text.lower().startswith("json"):
             normalized_text = normalized_text[4:].strip()
+    return normalized_text
+
+
+def parse_image_analysis(text: str) -> ImageAnalysis:
+    if not text:
+        return ImageAnalysis(is_food=False, description="不太清楚內容")
+
+    normalized_text = strip_json_fence(text)
 
     try:
         parsed = json.loads(normalized_text)
