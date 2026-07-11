@@ -17,7 +17,7 @@ def get_summary_date(now: datetime | None = None) -> str:
 
 
 def build_daily_summary(local_date: str, meals: list[dict[str, Any]]) -> str:
-    title = f"今日吃飯紀錄 {local_date}"
+    title = f"🍽️今日吃飯紀錄🍽️\n 📅{local_date}"
     if not meals:
         return f"{title}\n\n今天還沒有食物紀錄。"
 
@@ -42,7 +42,9 @@ def build_daily_summary(local_date: str, meals: list[dict[str, Any]]) -> str:
         for record in records:
             display_name = record.get("display_name") or "有人"
             description = (record.get("description") or "不太清楚內容").strip()
-            lines.append(f"- {display_name}：{description}")
+            calories = (record.get("nutrition") or {}).get("calories_kcal")
+            calorie_text = f"，約 {round(calories)} kcal" if isinstance(calories, (int, float)) else ""
+            lines.append(f"- {display_name}：{description}{calorie_text}")
 
     lines.append("")
     lines.append(f"總計：{len(seen_users)} 人，{len(meals)} 筆紀錄")

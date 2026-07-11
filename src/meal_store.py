@@ -53,6 +53,7 @@ class MealStore:
         display_name: str,
         meal_type: str,
         description: str,
+        nutrition: dict[str, str | int | float | None] | None,
         message: dict[str, Any],
         now: datetime,
     ) -> None:
@@ -77,6 +78,7 @@ class MealStore:
                 "display_name": display_name,
                 "meal_type": meal_type,
                 "description": description.strip() or "不太清楚內容",
+                "nutrition": nutrition,
                 "message_type": message.get("type", "image"),
                 "line_message_id": message_id,
                 "local_date": local_now.date().isoformat(),

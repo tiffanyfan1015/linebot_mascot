@@ -1,6 +1,8 @@
 import base64
 import json
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
 from google import genai
@@ -16,10 +18,31 @@ class AIServiceError(Exception):
     pass
 
 
+@dataclass
+class NutritionEstimate:
+    serving_description: str | None = None
+    calories_kcal: int | None = None
+    protein_g: float | None = None
+    carbohydrates_g: float | None = None
+    fat_g: float | None = None
+    fiber_g: float | None = None
+
+    def as_dict(self) -> dict[str, str | int | float | None]:
+        return {
+            "serving_description": self.serving_description,
+            "calories_kcal": self.calories_kcal,
+            "protein_g": self.protein_g,
+            "carbohydrates_g": self.carbohydrates_g,
+            "fat_g": self.fat_g,
+            "fiber_g": self.fiber_g,
+        }
+
+
+@dataclass
 class ImageAnalysis:
-    def __init__(self, is_food: bool, description: str) -> None:
-        self.is_food = is_food
-        self.description = description
+    is_food: bool
+    description: str
+    nutrition: NutritionEstimate | None = None
 
 
 class GeminiAIClient:
@@ -72,10 +95,17 @@ class GeminiAIClient:
                             "text": (
                                 "Analyze this image for a LINE group chat bot. "
                                 "Return compact JSON only with this schema: "
-                                '{"is_food": boolean, "description": string}. '
+                                '{"is_food": boolean, "description": string, "nutrition": '
+                                '{"serving_description": string, "calories_kcal": number, '
+                                '"protein_g": number, "carbohydrates_g": number, "fat_g": number, '
+                                '"fiber_g": number} | null}. '
                                 "Set is_food to true only if the image clearly shows food, a meal, or something meant to be eaten. "
-                                "Write description as a short Traditional Chinese noun phrase describing the main non-food subject. "
-                                "If the subject is unclear, use \"不太清楚內容\"."
+                                "Write description as a short Traditional Chinese name of the food for food images, "
+                                "or a short noun phrase describing the main non-food subject otherwise. "
+                                "For food, estimate the visible portion's total nutrition, not per 100 grams. "
+                                "Use reasonable whole-number calorie estimates and one decimal place at most for grams. "
+                                "Set nutrition to null if the food or portion cannot be estimated from the image. "
+                                "Do not make medical, dietary, or health claims. If the subject is unclear, use \"不太清楚內容\"."
                             )
                         },
                         {
@@ -99,10 +129,11 @@ class GeminiAIClient:
         text = extract_gemini_text(data).strip()
         analysis = parse_image_analysis(text)
         logger.info(
-            "Gemini image analysis result: raw=%s is_food=%s description=%s",
+            "Gemini image analysis result: raw=%s is_food=%s description=%s nutrition=%s",
             text,
             analysis.is_food,
             analysis.description,
+            analysis.nutrition,
         )
         return analysis
 
@@ -144,7 +175,42 @@ def parse_image_analysis(text: str) -> ImageAnalysis:
     return ImageAnalysis(
         is_food=parsed.get("is_food") is True,
         description=description.strip(),
+        nutrition=parse_nutrition_estimate(parsed.get("nutrition")) if parsed.get("is_food") is True else None,
     )
+
+
+def parse_nutrition_estimate(value: Any) -> NutritionEstimate | None:
+    if not isinstance(value, dict):
+        return None
+
+    serving_description = value.get("serving_description")
+    if not isinstance(serving_description, str) or not serving_description.strip():
+        serving_description = None
+
+    calories_kcal = parse_number(value.get("calories_kcal"), integer=True)
+    protein_g = parse_number(value.get("protein_g"))
+    carbohydrates_g = parse_number(value.get("carbohydrates_g"))
+    fat_g = parse_number(value.get("fat_g"))
+    fiber_g = parse_number(value.get("fiber_g"))
+    if all(item is None for item in (calories_kcal, protein_g, carbohydrates_g, fat_g, fiber_g)):
+        return None
+
+    return NutritionEstimate(
+        serving_description=serving_description.strip() if serving_description else None,
+        calories_kcal=calories_kcal,
+        protein_g=protein_g,
+        carbohydrates_g=carbohydrates_g,
+        fat_g=fat_g,
+        fiber_g=fiber_g,
+    )
+
+
+def parse_number(value: Any, *, integer: bool = False) -> int | float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value < 0:
+        return None
+    return int(round(value)) if integer else round(float(value), 1)
 
 
 gemini_ai_client = GeminiAIClient()

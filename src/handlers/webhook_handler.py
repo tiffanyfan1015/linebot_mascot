@@ -102,10 +102,19 @@ async def handle_image_message(reply_token: str, message: dict, source: dict, di
             display_name=display_name,
             meal_type=meal_type,
             description=image_analysis.description,
+            nutrition=image_analysis.nutrition.as_dict() if image_analysis.nutrition else None,
             message=message,
             now=now,
         )
-        await line_client.reply_text(reply_token, build_photo_meal_reply(display_name, meal_type=meal_type))
+        await line_client.reply_text(
+            reply_token,
+            build_photo_meal_reply(
+                display_name,
+                meal_type=meal_type,
+                description=image_analysis.description,
+                nutrition=image_analysis.nutrition.as_dict() if image_analysis.nutrition else None,
+            ),
+        )
         return
 
     await line_client.reply_text(reply_token, build_non_food_photo_reply(display_name, image_analysis.description))
@@ -180,9 +189,49 @@ def build_photo_meal_reply(
     display_name: str,
     now: datetime | None = None,
     meal_type: str | None = None,
+    description: str | None = None,
+    nutrition: dict[str, str | int | float | None] | None = None,
 ) -> str:
     detected_meal_type = meal_type or detect_meal_type(now or datetime.now(TAIPEI_TIMEZONE))
-    return f"{display_name} 吃{format_meal_type_zh(detected_meal_type)}了"
+    lines = [f"{display_name} 吃{format_meal_type_zh(detected_meal_type)}了"]
+    if description and description.strip():
+        lines.append(f"食物： {description.strip()}")
+    nutrition_text = format_nutrition_estimate(nutrition)
+    if nutrition_text:
+        lines.append(f"營養估算（照片判讀，僅供參考）\n{nutrition_text}")
+    else:
+        lines.append("營養估算：無法從這張照片可靠判讀")
+    return "\n".join(lines)
+
+
+def format_nutrition_estimate(nutrition: dict[str, str | int | float | None] | None) -> str | None:
+    if not nutrition:
+        return None
+
+    parts: list[str] = []
+    serving_description = nutrition.get("serving_description")
+    if isinstance(serving_description, str) and serving_description.strip():
+        parts.append(f"份量：約 {serving_description.strip()}")
+
+    calories = nutrition.get("calories_kcal")
+    if isinstance(calories, (int, float)) and not isinstance(calories, bool):
+        parts.append(f"熱量：約 {round(calories)} kcal")
+
+    nutrient_labels = {
+        "protein_g": "蛋白質",
+        "carbohydrates_g": "碳水",
+        "fat_g": "脂肪",
+        "fiber_g": "纖維",
+    }
+    macros = []
+    for field, label in nutrient_labels.items():
+        value = nutrition.get(field)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            macros.append(f"{label} {value:g}g")
+    if macros:
+        parts.append("、".join(macros))
+
+    return "\n".join(parts) or None
 
 
 def detect_meal_type(now: datetime) -> str:
@@ -202,7 +251,7 @@ def format_meal_type_zh(meal_type: str) -> str:
         "breakfast": "早餐",
         "lunch": "午餐",
         "dinner": "晚餐",
-        "late_night": "消夜",
+        "late_night": "宵夜",
     }.get(meal_type, "東西")
 
 
@@ -220,6 +269,7 @@ def save_meal_log_safely(
     display_name: str,
     meal_type: str,
     description: str,
+    nutrition: dict[str, str | int | float | None] | None,
     message: dict,
     now: datetime,
 ) -> None:
@@ -230,6 +280,7 @@ def save_meal_log_safely(
             display_name=display_name,
             meal_type=meal_type,
             description=description,
+            nutrition=nutrition,
             message=message,
             now=now,
         )
