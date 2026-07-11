@@ -30,6 +30,18 @@ class LineClient:
             )
             response.raise_for_status()
 
+    async def push_text(self, to: str, text: str) -> None:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(
+                f"{LINE_API_BASE_URL}/v2/bot/message/push",
+                headers=self._headers,
+                json={
+                    "to": to,
+                    "messages": [{"type": "text", "text": text}],
+                },
+            )
+            response.raise_for_status()
+
     async def get_message_content(self, message_id: str) -> tuple[bytes, str | None]:
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(

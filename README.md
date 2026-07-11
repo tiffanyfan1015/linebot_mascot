@@ -9,6 +9,8 @@ Python + FastAPI LINE Bot starter for Cloud Run.
 - Replies when the bot joins a group.
 - Rule replies for `/help`, `/ping`, `早安`, and `開會`.
 - Image meal replies based on Taiwan time.
+- Stores food image meal logs in Firestore.
+- `POST /jobs/daily-summary` for scheduled LINE group meal summaries.
 - Gemini AI replies when the bot is mentioned or when a message starts with `/ask`.
 - `GET /healthz` for deployment checks.
 
@@ -20,6 +22,9 @@ Set these in Cloud Run. Do not commit real values to GitHub.
 LINE_CHANNEL_SECRET=replace-with-your-channel-secret
 LINE_CHANNEL_ACCESS_TOKEN=replace-with-your-channel-access-token
 PORT=8080
+GOOGLE_CLOUD_PROJECT=replace-with-your-gcp-project-id
+SCHEDULER_SECRET=replace-with-a-random-secret
+SUMMARY_TIMEZONE=Asia/Taipei
 ```
 
 ## Optional AI Environment Variables
@@ -93,3 +98,16 @@ Then enable `Use webhook` and click `Verify` in LINE Developers Console.
 - `.env` files are ignored.
 - Keep secrets only in Cloud Run environment variables or Secret Manager.
 - Do not expose `GEMINI_API_KEY` in client-side code.
+
+## Daily Summary Scheduler
+
+Create a Cloud Scheduler HTTP job to call:
+
+```text
+POST https://<your-cloud-run-url>/jobs/daily-summary
+Header: x-scheduler-secret: <SCHEDULER_SECRET>
+Timezone: Asia/Taipei
+Schedule example: 30 22 * * *
+```
+
+The job reads enabled `chat_targets` from Firestore, queries that target's `meal_logs` for the current local date, and sends the summary with LINE push messages.

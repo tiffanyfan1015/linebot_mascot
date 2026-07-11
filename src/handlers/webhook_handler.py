@@ -8,6 +8,7 @@ import httpx
 from src.ai_client import AIServiceError, gemini_ai_client
 from src.handlers.reply_rules import build_rule_based_reply
 from src.line_client import line_client
+from src.meal_store import meal_store
 
 
 logger = logging.getLogger(__name__)
@@ -25,8 +26,10 @@ async def handle_events(events: list[dict]) -> None:
 async def handle_event(event: dict) -> None:
     event_type = event.get("type")
     reply_token = event.get("replyToken")
+    source = event.get("source", {})
 
     if event_type == "join" and reply_token:
+        save_chat_target_safely(source)
         await line_client.reply_text(reply_token, "大家好，我是 LINE Bot。請傳文字訊息給我測試。")
         return
 
@@ -34,11 +37,11 @@ async def handle_event(event: dict) -> None:
         return
 
     message = event.get("message", {})
-    source = event.get("source", {})
+    save_chat_target_safely(source)
     display_name = await resolve_display_name(source)
 
     if message.get("type") == "image":
-        await handle_image_message(reply_token, message, display_name)
+        await handle_image_message(reply_token, message, source, display_name)
         return
 
     if message.get("type") != "text":
@@ -70,7 +73,7 @@ async def handle_event(event: dict) -> None:
     return
 
 
-async def handle_image_message(reply_token: str, message: dict, display_name: str) -> None:
+async def handle_image_message(reply_token: str, message: dict, source: dict, display_name: str) -> None:
     logger.info("Received LINE image message payload=%s", json.dumps(message, ensure_ascii=False))
 
     if not gemini_ai_client.enabled:
@@ -91,7 +94,18 @@ async def handle_image_message(reply_token: str, message: dict, display_name: st
         return
 
     if image_analysis.is_food:
-        await line_client.reply_text(reply_token, build_photo_meal_reply(display_name))
+        now = datetime.now(TAIPEI_TIMEZONE)
+        meal_type = detect_meal_type(now)
+        save_meal_log_safely(
+            source=source,
+            user_id=source.get("userId"),
+            display_name=display_name,
+            meal_type=meal_type,
+            description=image_analysis.description,
+            message=message,
+            now=now,
+        )
+        await line_client.reply_text(reply_token, build_photo_meal_reply(display_name, meal_type=meal_type))
         return
 
     await line_client.reply_text(reply_token, build_non_food_photo_reply(display_name, image_analysis.description))
@@ -162,19 +176,65 @@ def build_non_food_photo_reply(display_name: str, description: str) -> str:
     return f"{display_name} 傳了一張 {cleaned_description} 的照片"
 
 
-def build_photo_meal_reply(display_name: str, now: datetime | None = None) -> str:
-    current_time = (now or datetime.now(TAIPEI_TIMEZONE)).timetz().replace(tzinfo=None)
+def build_photo_meal_reply(
+    display_name: str,
+    now: datetime | None = None,
+    meal_type: str | None = None,
+) -> str:
+    detected_meal_type = meal_type or detect_meal_type(now or datetime.now(TAIPEI_TIMEZONE))
+    return f"{display_name} 吃{format_meal_type_zh(detected_meal_type)}了"
+
+
+def detect_meal_type(now: datetime) -> str:
+    current_time = now.astimezone(TAIPEI_TIMEZONE).timetz().replace(tzinfo=None)
 
     if time(6, 0) <= current_time < time(11, 0):
-        meal_text = "吃早餐了"
-    elif time(11, 0) <= current_time < time(16, 30):
-        meal_text = "吃午餐了"
-    elif time(16, 30) <= current_time < time(22, 0):
-        meal_text = "吃晚餐了"
-    else:
-        meal_text = "吃消夜了"
+        return "breakfast"
+    if time(11, 0) <= current_time < time(16, 30):
+        return "lunch"
+    if time(16, 30) <= current_time < time(22, 0):
+        return "dinner"
+    return "late_night"
 
-    return f"{display_name} {meal_text}"
+
+def format_meal_type_zh(meal_type: str) -> str:
+    return {
+        "breakfast": "早餐",
+        "lunch": "午餐",
+        "dinner": "晚餐",
+        "late_night": "消夜",
+    }.get(meal_type, "東西")
+
+
+def save_chat_target_safely(source: dict) -> None:
+    try:
+        meal_store.save_chat_target(source)
+    except Exception:
+        logger.exception("Failed to save LINE chat target")
+
+
+def save_meal_log_safely(
+    *,
+    source: dict,
+    user_id: str | None,
+    display_name: str,
+    meal_type: str,
+    description: str,
+    message: dict,
+    now: datetime,
+) -> None:
+    try:
+        meal_store.save_meal_log(
+            source=source,
+            user_id=user_id,
+            display_name=display_name,
+            meal_type=meal_type,
+            description=description,
+            message=message,
+            now=now,
+        )
+    except Exception:
+        logger.exception("Failed to save meal log")
 
 
 async def extract_ai_prompt(message: dict, text: str) -> str | None:
