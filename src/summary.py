@@ -22,7 +22,7 @@ def build_daily_summary(
     meals: list[dict[str, Any]],
     daily_titles: dict[str, str] | None = None,
 ) -> str:
-    title = f"🍽️今日吃飯紀錄🍽️\n 📅{local_date}"
+    title = f"🍽️今日吃飯紀錄🍽️\n 📅：{local_date}"
     if not meals:
         return f"{title}\n\n今天還沒有食物紀錄。"
 
@@ -59,7 +59,9 @@ def build_daily_summary(
         lines.append(f"- {display_names[user_key]}：{generated_title or choose_daily_title(records)}")
 
     lines.append("")
-    lines.append(f"總計：{len(meals_by_user)} 人，{len(meals)} 筆紀錄")
+    lines.append("大家今天吃了幾餐？")
+    for user_key, records in meals_by_user.items():
+        lines.append(f"- {display_names[user_key]}：{len(records)} 餐")
     return "\n".join(lines)
 
 
