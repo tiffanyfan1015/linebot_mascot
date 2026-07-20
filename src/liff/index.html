@@ -53,9 +53,9 @@
             <strong id="member-count">0</strong>
             <small>人</small>
           </div>
-          <div class="summary-item summary-energy">
-            <span>估算熱量</span>
-            <strong id="calorie-total">0</strong>
+          <div class="summary-item summary-energy" id="member-calorie-summary" hidden>
+            <span>今日估算熱量</span>
+            <strong id="member-calorie-total">0</strong>
             <small>kcal</small>
           </div>
         </div>
@@ -107,7 +107,19 @@
             </div>
             <span class="record-count" id="selected-record-count"></span>
           </div>
-          <div class="member-filters" id="calendar-member-filters" aria-label="篩選群組成員"></div>
+          <div class="filter-row calendar-filter-row">
+            <div class="member-filters" id="calendar-member-filters" aria-label="篩選群組成員"></div>
+            <label class="select-control">
+              <span class="sr-only">篩選餐次</span>
+              <select id="calendar-meal-filter">
+                <option value="all">全部餐次</option>
+                <option value="breakfast">早餐</option>
+                <option value="lunch">午餐</option>
+                <option value="dinner">晚餐</option>
+                <option value="late_night">宵夜</option>
+              </select>
+            </label>
+          </div>
           <div class="meal-list" id="calendar-meal-list"></div>
           <div class="empty-state compact" id="calendar-empty" hidden>
             <div class="empty-mark" aria-hidden="true">○</div>

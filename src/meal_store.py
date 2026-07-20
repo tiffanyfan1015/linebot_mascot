@@ -117,6 +117,7 @@ class MealStore:
         self,
         *,
         target_id: str,
+        viewer_user_id: str,
         from_date: str,
         to_date: str,
         meal_type: str | None = None,
@@ -153,20 +154,70 @@ class MealStore:
             if selected_member_key and record_member_key != selected_member_key:
                 continue
 
-            matching_records.append(serialize_group_meal(snapshot.id, meal, record_member_key))
+            matching_records.append(
+                serialize_group_meal(
+                    snapshot.id,
+                    meal,
+                    record_member_key,
+                    can_edit=meal.get("user_id") == viewer_user_id,
+                )
+            )
             if len(matching_records) > limit:
                 break
 
         next_cursor = create_meal_cursor(target_id, matching_records[limit - 1]["document_id"]) if len(matching_records) > limit else None
         return [{key: value for key, value in record.items() if key != "document_id"} for record in matching_records[:limit]], next_cursor
 
+    def update_group_meal(
+        self,
+        *,
+        target_id: str,
+        viewer_user_id: str,
+        record_id: str,
+        description: str | None,
+        meal_type: str | None,
+    ) -> dict[str, Any] | None:
+        snapshot = self.client.collection(MEAL_LOGS_COLLECTION).document(record_id).get()
+        meal = snapshot.to_dict() if snapshot.exists else None
+        if not meal or meal.get("target_id") != target_id or meal.get("user_id") != viewer_user_id:
+            return None
+
+        updates: dict[str, Any] = {}
+        if description is not None:
+            updates["description"] = description.strip()
+        if meal_type is not None:
+            updates["meal_type"] = meal_type
+        snapshot.reference.update(updates)
+        meal.update(updates)
+        return serialize_group_meal(
+            record_id,
+            meal,
+            member_key(target_id, viewer_user_id),
+            can_edit=True,
+        )
+
+    def delete_group_meal(self, *, target_id: str, viewer_user_id: str, record_id: str) -> bool:
+        snapshot = self.client.collection(MEAL_LOGS_COLLECTION).document(record_id).get()
+        meal = snapshot.to_dict() if snapshot.exists else None
+        if not meal or meal.get("target_id") != target_id or meal.get("user_id") != viewer_user_id:
+            return False
+        snapshot.reference.delete()
+        return True
 
 
-def serialize_group_meal(document_id: str, meal: dict[str, Any], record_member_key: str) -> dict[str, Any]:
+def serialize_group_meal(
+    document_id: str,
+    meal: dict[str, Any],
+    record_member_key: str,
+    *,
+    can_edit: bool = False,
+) -> dict[str, Any]:
     nutrition = meal.get("nutrition")
     return {
         "document_id": document_id,
+        "record_id": document_id,
         "record_key": record_key(meal.get("target_id") or "", document_id),
+        "can_edit": can_edit,
         "member_key": record_member_key,
         "display_name": meal.get("display_name") or "有人",
         "meal_type": meal.get("meal_type") or "unknown",

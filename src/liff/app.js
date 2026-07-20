@@ -7,12 +7,14 @@ const state = {
   todayMember: "all",
   calendarMember: "all",
   todayMealType: "all",
+  calendarMealType: "all",
   ticket: null,
   idToken: null,
   mockMode: false,
 };
 
 const memberColors = ["#2f6b4f", "#d7654c", "#4f729c", "#d19a35", "#735a9c", "#40848a"];
+const knownMembers = new Map();
 const mealLabels = { breakfast: "早餐", lunch: "午餐", dinner: "晚餐", late_night: "宵夜", unknown: "其他" };
 const weekdayLabels = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
 
@@ -64,6 +66,7 @@ async function loadInitialApiData() {
   ]);
   state.todayItems = todayItems;
   state.calendarItems = calendarItems;
+  rememberMembers([...todayItems, ...calendarItems]);
 }
 
 function enableMockMode() {
@@ -75,6 +78,7 @@ function enableMockMode() {
   const monthRange = getMonthRange(state.calendarMonth);
   state.todayItems = mockItems.filter((item) => item.local_date === todayKey);
   state.calendarItems = mockItems.filter((item) => item.local_date >= monthRange.from && item.local_date <= monthRange.to);
+  rememberMembers(mockItems);
 }
 
 async function fetchAllMeals(from, to) {
@@ -104,6 +108,10 @@ function bindEvents() {
   document.getElementById("today-meal-filter").addEventListener("change", (event) => {
     state.todayMealType = event.target.value;
     renderToday();
+  });
+  document.getElementById("calendar-meal-filter").addEventListener("change", (event) => {
+    state.calendarMealType = event.target.value;
+    renderSelectedDate();
   });
   document.getElementById("refresh-button").addEventListener("click", refreshCurrentData);
   document.getElementById("previous-month").addEventListener("click", () => changeMonth(-1));
@@ -140,10 +148,10 @@ async function refreshCurrentData() {
 async function changeMonth(offset) {
   state.calendarMonth = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth() + offset, 1);
   state.selectedDate = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth(), 1);
-  state.calendarMember = "all";
   if (state.mockMode) {
     const range = getMonthRange(state.calendarMonth);
     state.calendarItems = buildMockMeals().filter((item) => item.local_date >= range.from && item.local_date <= range.to);
+    rememberMembers(state.calendarItems);
     renderCalendar();
     return;
   }
@@ -151,6 +159,7 @@ async function changeMonth(offset) {
   try {
     const range = getMonthRange(state.calendarMonth);
     state.calendarItems = await fetchAllMeals(range.from, range.to);
+    rememberMembers(state.calendarItems);
     renderCalendar();
   } catch (error) {
     showToast(error.message);
@@ -185,10 +194,16 @@ function renderToday() {
     return memberMatch && mealMatch;
   });
   const uniqueMembers = new Set(state.todayItems.map((item) => item.member_key));
-  const calories = state.todayItems.reduce((sum, item) => sum + numericNutrition(item, "calories_kcal"), 0);
+  const memberSummary = document.getElementById("member-calorie-summary");
+  const selectedMemberItems = state.todayItems.filter((item) => item.member_key === state.todayMember);
+  memberSummary.hidden = state.todayMember === "all";
+  document.querySelector(".summary-grid").classList.toggle("has-member-calories", state.todayMember !== "all");
+  if (state.todayMember !== "all") {
+    const calories = selectedMemberItems.reduce((sum, item) => sum + numericNutrition(item, "calories_kcal"), 0);
+    document.getElementById("member-calorie-total").textContent = Math.round(calories).toLocaleString("zh-TW");
+  }
   document.getElementById("meal-count").textContent = state.todayItems.length;
   document.getElementById("member-count").textContent = uniqueMembers.size;
-  document.getElementById("calorie-total").textContent = Math.round(calories).toLocaleString("zh-TW");
   renderMealList("today-meal-list", filteredItems);
   document.getElementById("today-empty").hidden = filteredItems.length > 0;
 }
@@ -216,7 +231,6 @@ function renderCalendar() {
     button.innerHTML = `<span>${date.getDate()}</span><span class="day-dots">${renderDayDots(dayItems)}</span>`;
     button.addEventListener("click", () => {
       state.selectedDate = date;
-      state.calendarMember = "all";
       renderCalendar();
     });
     grid.appendChild(button);
@@ -227,13 +241,16 @@ function renderCalendar() {
 function renderSelectedDate() {
   const selectedKey = formatDateKey(state.selectedDate);
   const selectedItems = state.calendarItems.filter((item) => item.local_date === selectedKey);
-  const members = getMembers(state.calendarItems);
-  if (state.calendarMember !== "all" && !members.some((member) => member.key === state.calendarMember)) state.calendarMember = "all";
+  const members = includeSelectedMember(getMembers(state.calendarItems), state.calendarMember);
   renderMemberFilters("calendar-member-filters", members, state.calendarMember, (key) => {
     state.calendarMember = key;
     renderSelectedDate();
   });
-  const filteredItems = selectedItems.filter((item) => state.calendarMember === "all" || item.member_key === state.calendarMember);
+  const filteredItems = selectedItems.filter((item) => {
+    const memberMatch = state.calendarMember === "all" || item.member_key === state.calendarMember;
+    const mealMatch = state.calendarMealType === "all" || item.meal_type === state.calendarMealType;
+    return memberMatch && mealMatch;
+  });
   document.getElementById("selected-weekday").textContent = weekdayLabels[state.selectedDate.getDay()];
   document.getElementById("selected-date-title").textContent = `${state.selectedDate.getMonth() + 1}月${state.selectedDate.getDate()}日`;
   document.getElementById("selected-record-count").textContent = `${filteredItems.length} 筆`;
@@ -249,6 +266,7 @@ function renderMemberFilters(containerId, members, activeKey, onSelect) {
     button.type = "button";
     button.className = "filter-chip";
     button.classList.toggle("is-active", member.key === activeKey);
+    button.style.setProperty("--member-color", member.key === "all" ? memberColors[0] : getMemberColor(member.key));
     button.textContent = member.name;
     button.addEventListener("click", () => onSelect(member.key));
     container.appendChild(button);
@@ -282,9 +300,84 @@ function createMealCard(item) {
       <div class="meal-meta"><strong>${escapeHTML(item.display_name)}</strong><span>${escapeHTML(mealLabels[item.meal_type] || "其他")}</span><span>${escapeHTML(formatTime(item.local_time))}</span></div>
       <p class="meal-name">${escapeHTML(item.description)}</p>
       ${nutritionParts.length ? `<p class="nutrition-line">${escapeHTML(nutritionParts.join(" · "))}</p>` : ""}
+      ${item.can_edit ? `<div class="meal-actions"><button type="button" class="meal-action edit-meal">編輯</button><button type="button" class="meal-action delete-meal">刪除</button></div>` : ""}
     </div>
     <div class="calorie-value">${calories ? `<strong>${Math.round(calories)}</strong><span>kcal</span>` : `<span>未估算</span>`}</div>`;
+  if (item.can_edit) {
+    card.querySelector(".edit-meal").addEventListener("click", () => editMeal(item));
+    card.querySelector(".delete-meal").addEventListener("click", () => deleteMeal(item));
+  }
   return card;
+}
+
+async function editMeal(item) {
+  const description = window.prompt("修改餐點內容", item.description);
+  if (description === null) return;
+  if (!description.trim()) {
+    showToast("餐點內容不能空白");
+    return;
+  }
+
+  const mealTypeInput = window.prompt("餐次：早餐、午餐、晚餐或宵夜", mealLabels[item.meal_type] || item.meal_type);
+  if (mealTypeInput === null) return;
+  const mealType = normalizeMealType(mealTypeInput);
+  if (!mealType) {
+    showToast("請輸入早餐、午餐、晚餐或宵夜");
+    return;
+  }
+
+  try {
+    const itemUpdate = await mutateMeal(item.record_id, "PATCH", { description: description.trim(), meal_type: mealType });
+    replaceMeal(itemUpdate);
+    showToast("紀錄已更新");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function deleteMeal(item) {
+  if (!window.confirm(`確定刪除「${item.description}」嗎？`)) return;
+  try {
+    await mutateMeal(item.record_id, "DELETE");
+    removeMeal(item.record_id);
+    showToast("紀錄已刪除");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function normalizeMealType(value) {
+  const normalized = String(value).trim().toLowerCase();
+  return {
+    breakfast: "breakfast", "早餐": "breakfast",
+    lunch: "lunch", "午餐": "lunch",
+    dinner: "dinner", "晚餐": "dinner",
+    late_night: "late_night", "宵夜": "late_night",
+  }[normalized] || null;
+}
+
+async function mutateMeal(recordId, method, body) {
+  if (!recordId || state.mockMode) throw new Error("預覽資料無法修改");
+  const response = await fetch(`/api/liff/group-meals/${encodeURIComponent(recordId)}?ticket=${encodeURIComponent(state.ticket)}`, {
+    method,
+    headers: { Authorization: `Bearer ${state.idToken}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.detail || "無法更新紀錄");
+  return payload.item;
+}
+
+function replaceMeal(updatedItem) {
+  state.todayItems = state.todayItems.map((item) => item.record_id === updatedItem.record_id ? updatedItem : item);
+  state.calendarItems = state.calendarItems.map((item) => item.record_id === updatedItem.record_id ? updatedItem : item);
+  renderAll();
+}
+
+function removeMeal(recordId) {
+  state.todayItems = state.todayItems.filter((item) => item.record_id !== recordId);
+  state.calendarItems = state.calendarItems.filter((item) => item.record_id !== recordId);
+  renderAll();
 }
 
 function renderDayDots(items) {
@@ -298,6 +391,18 @@ function getMembers(items) {
     if (!members.has(item.member_key)) members.set(item.member_key, item.display_name);
   });
   return [...members.entries()].map(([key, name]) => ({ key, name }));
+}
+
+function rememberMembers(items) {
+  items.forEach((item) => {
+    if (item.member_key && item.display_name) knownMembers.set(item.member_key, item.display_name);
+  });
+}
+
+function includeSelectedMember(members, selectedKey) {
+  if (selectedKey === "all" || members.some((member) => member.key === selectedKey)) return members;
+  const name = knownMembers.get(selectedKey);
+  return name ? [...members, { key: selectedKey, name }] : members;
 }
 
 function getMemberColor(key) {

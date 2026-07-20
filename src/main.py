@@ -4,7 +4,9 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from fastapi.staticfiles import StaticFiles
 
 from src.ai_client import AIServiceError, gemini_ai_client
@@ -31,6 +33,14 @@ from src.security import verify_line_signature
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+MEAL_TYPES = {"breakfast", "lunch", "dinner", "late_night"}
+
+
+class LiffMealUpdate(BaseModel):
+    description: str | None = Field(default=None, min_length=1, max_length=500)
+    meal_type: str | None = None
+
 
 app = FastAPI(title="LINE Bot")
 app.mount("/liff", StaticFiles(directory=Path(__file__).resolve().parent / "liff", html=True), name="liff")
@@ -76,9 +86,8 @@ async def liff_group_meals(
     limit: int = Query(default=50, ge=1, le=100),
     cursor: str | None = Query(default=None),
 ) -> dict:
-    access = await authenticate_liff_group_request(authorization, ticket)
-    allowed_meal_types = {"breakfast", "lunch", "dinner", "late_night"}
-    if meal_type and meal_type not in allowed_meal_types:
+    access, line_user_id = await authenticate_liff_group_request(authorization, ticket)
+    if meal_type and meal_type not in MEAL_TYPES:
         raise HTTPException(status_code=400, detail="Invalid meal_type")
 
     today = datetime.now(ZoneInfo(settings.summary_timezone)).date()
@@ -92,6 +101,7 @@ async def liff_group_meals(
     try:
         meals, next_cursor = meal_store.list_group_meals(
             target_id=access.target_id,
+            viewer_user_id=line_user_id,
             from_date=selected_from_date.isoformat(),
             to_date=selected_to_date.isoformat(),
             meal_type=meal_type,
@@ -108,6 +118,55 @@ async def liff_group_meals(
         "items": meals,
         "next_cursor": next_cursor,
     }
+
+
+@app.patch("/api/liff/group-meals/{record_id}")
+async def update_liff_group_meal(
+    record_id: str,
+    update: LiffMealUpdate,
+    ticket: str = Query(min_length=20, max_length=2048),
+    authorization: str = Header(default=""),
+) -> dict:
+    if not record_id or len(record_id) > 256 or "/" in record_id:
+        raise HTTPException(status_code=400, detail="Invalid record ID")
+    if update.meal_type is not None and update.meal_type not in MEAL_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid meal_type")
+    if update.description is not None and not update.description.strip():
+        raise HTTPException(status_code=400, detail="Description must not be blank")
+    if update.description is None and update.meal_type is None:
+        raise HTTPException(status_code=400, detail="Provide a description or meal_type")
+
+    access, line_user_id = await authenticate_liff_group_request(authorization, ticket)
+    item = meal_store.update_group_meal(
+        target_id=access.target_id,
+        viewer_user_id=line_user_id,
+        record_id=record_id,
+        description=update.description,
+        meal_type=update.meal_type,
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Meal record not found")
+    return {"item": item}
+
+
+@app.delete("/api/liff/group-meals/{record_id}")
+async def delete_liff_group_meal(
+    record_id: str,
+    ticket: str = Query(min_length=20, max_length=2048),
+    authorization: str = Header(default=""),
+) -> dict[str, bool]:
+    if not record_id or len(record_id) > 256 or "/" in record_id:
+        raise HTTPException(status_code=400, detail="Invalid record ID")
+
+    access, line_user_id = await authenticate_liff_group_request(authorization, ticket)
+    deleted = meal_store.delete_group_meal(
+        target_id=access.target_id,
+        viewer_user_id=line_user_id,
+        record_id=record_id,
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Meal record not found")
+    return {"ok": True}
 
 
 async def authenticate_liff_group_request(authorization: str, ticket: str):
@@ -138,7 +197,7 @@ async def authenticate_liff_group_request(authorization: str, ticket: str):
             raise HTTPException(status_code=502, detail="LINE group membership verification failed") from exc
         except httpx.HTTPError as exc:
             raise HTTPException(status_code=502, detail="LINE group membership verification is unavailable") from exc
-    return access
+    return access, line_user_id
 
 
 @app.post("/jobs/daily-summary")

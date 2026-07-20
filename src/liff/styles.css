@@ -180,7 +180,7 @@ h3 {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.35fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   min-height: 104px;
   margin: 14px 0 18px;
   border: 1px solid var(--line);
@@ -200,12 +200,12 @@ h3 {
 }
 
 .summary-item:last-child { border-right: 0; }
+.summary-grid.has-member-calories { grid-template-columns: 1fr 1fr 1.35fr; }
+.summary-energy strong { color: var(--coral); }
 .summary-item span, .summary-item small { color: var(--muted); }
 .summary-item span { font-size: 11px; font-weight: 650; }
 .summary-item strong { margin: 5px 0 1px; font-size: 25px; line-height: 1; }
 .summary-item small { font-size: 10px; }
-.summary-energy strong { color: var(--coral); }
-
 .filter-row {
   display: flex;
   align-items: center;
@@ -228,18 +228,18 @@ h3 {
   height: 34px;
   flex: 0 0 auto;
   padding: 0 12px;
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--member-color, var(--green)) 38%, white);
   border-radius: 17px;
-  background: var(--surface);
-  color: var(--muted);
+  background: color-mix(in srgb, var(--member-color, var(--green)) 8%, white);
+  color: var(--member-color, var(--green));
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
 }
 
 .filter-chip.is-active {
-  border-color: var(--green);
-  background: var(--green);
+  border-color: var(--member-color, var(--green));
+  background: var(--member-color, var(--green));
   color: #ffffff;
 }
 
@@ -294,6 +294,9 @@ h3 {
 }
 .meal-meta strong { color: var(--ink); font-size: 12px; }
 .meal-name { margin: 0; font-size: 15px; font-weight: 720; line-height: 1.35; }
+.meal-actions { display: flex; gap: 8px; margin-top: 8px; }
+.meal-action { padding: 0; border: 0; background: transparent; color: var(--member-color, var(--green)); font-size: 11px; font-weight: 700; cursor: pointer; }
+.meal-action.delete-meal { color: var(--coral); }
 .nutrition-line { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .calorie-value { min-width: 46px; text-align: right; }
 .calorie-value strong { display: block; color: var(--coral); font-size: 16px; }
@@ -416,7 +419,6 @@ h3 {
 @media (max-width: 380px) {
   .app-shell { padding-left: 12px; padding-right: 12px; }
   h1 { font-size: 24px; }
-  .summary-grid { grid-template-columns: .9fr .9fr 1.3fr; }
   .summary-item strong { font-size: 22px; }
   .meal-card { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 8px; padding: 10px 9px; }
   .member-avatar { width: 34px; height: 34px; }
