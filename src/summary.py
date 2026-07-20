@@ -22,7 +22,7 @@ def build_daily_summary(
     meals: list[dict[str, Any]],
     daily_titles: dict[str, str] | None = None,
 ) -> str:
-    title = f"🍽️今日吃飯紀錄🍽️\n 📅：{local_date}"
+    title = f"🍽️ {local_date} 吃飯紀錄🍽️\n "
     if not meals:
         return f"{title}\n\n今天還沒有食物紀錄。"
 
