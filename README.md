@@ -11,7 +11,7 @@ Python + FastAPI LINE Bot starter for Cloud Run.
 - Image meal replies based on Taiwan time.
 - Stores food image logs, including AI-estimated serving, calories, and macronutrients, in Firestore. Photo-based nutrition estimates are for reference only.
 - `POST /jobs/daily-summary` for scheduled LINE group meal summaries, with AI-generated daily titles and deterministic fallbacks.
-- `/飲食紀錄` issues a short-lived group history link; `GET /api/liff/group-meals` returns authenticated text-only history.
+- `/飲食紀錄` returns a persistent Flex Message button; `GET /api/liff/group-meals` verifies the signed group link, LIFF identity, and current group membership.
 - `/liff/` provides a mobile-first today and calendar history UI, with mock preview data until LIFF is configured.
 - Gemini AI replies when the bot is mentioned or when a message starts with `/ask`.
 - `GET /healthz` for deployment checks.
@@ -103,7 +103,7 @@ Then enable `Use webhook` and click `Verify` in LINE Developers Console.
 
 The UI is served at `/liff/`. Before a LIFF app is configured it displays local preview data; after configuration it initializes LIFF and reads authenticated group data from the API.
 
-After creating the LIFF app, set `LIFF_ID`, `LINE_LOGIN_CHANNEL_ID`, and a random `LIFF_TICKET_SECRET` of at least 32 characters. Members run `/飲食紀錄` inside a group to receive a user-bound link that expires after 15 minutes.
+After creating the LIFF app, set `LIFF_ID`, `LINE_LOGIN_CHANNEL_ID`, and a random `LIFF_TICKET_SECRET` of at least 32 characters. Members run `/飲食紀錄` inside a group to receive a persistent Flex Message button. The server verifies that the signed-in LINE user is still a member of that group each time the link is opened.
 
 The future LIFF page should send its LINE ID token as a bearer token:
 

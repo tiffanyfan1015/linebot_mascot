@@ -10,7 +10,7 @@ from src.handlers.reply_rules import build_rule_based_reply
 from src.liff_auth import (
     LiffConfigurationError,
     build_liff_group_history_url,
-    create_group_access_ticket,
+    create_permanent_group_access_ticket,
 )
 from src.line_client import line_client
 from src.meal_store import meal_store
@@ -84,26 +84,50 @@ async def handle_event(event: dict) -> None:
 
 async def handle_group_history_command(reply_token: str, source: dict) -> None:
     group_id = source.get("groupId") if source.get("type") == "group" else None
-    user_id = source.get("userId")
     if not group_id:
         await line_client.reply_text(reply_token, "請在 LINE 群組內使用 /飲食紀錄。")
         return
-    if not user_id:
-        await line_client.reply_text(reply_token, "目前無法確認你的 LINE 身分，請稍後再試。")
-        return
 
     try:
-        ticket = create_group_access_ticket(group_id, user_id)
-        history_url = build_liff_group_history_url(ticket)
+        history_message = build_group_history_flex_message(group_id)
     except LiffConfigurationError:
         logger.exception("LIFF group history is not configured")
         await line_client.reply_text(reply_token, "飲食紀錄頁面尚未完成設定，請稍後再試。")
         return
 
-    await line_client.reply_text(
-        reply_token,
-        f"這是你查看本群組飲食紀錄的專屬連結（15 分鐘內有效）：\n{history_url}",
-    )
+    await line_client.reply_messages(reply_token, [history_message])
+
+
+def build_group_history_flex_message(group_id: str) -> dict:
+    ticket = create_permanent_group_access_ticket(group_id)
+    history_url = build_liff_group_history_url(ticket)
+    return {
+        "type": "flex",
+        "altText": "查看本群組飲食紀錄",
+        "contents": {
+            "type": "bubble",
+            "size": "kilo",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "md",
+                "contents": [
+                    {"type": "text", "text": "本群組飲食紀錄", "weight": "bold", "size": "lg"},
+                    {"type": "text", "text": "查看今天與過去的飲食紀錄", "size": "sm", "color": "#666666", "wrap": True},
+                ],
+            },
+            "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [{
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#2F6B4F",
+                    "action": {"type": "uri", "label": "開啟飲食紀錄", "uri": history_url},
+                }],
+            },
+        },
+    }
 
 
 async def handle_image_message(reply_token: str, message: dict, source: dict, display_name: str) -> None:
@@ -139,15 +163,22 @@ async def handle_image_message(reply_token: str, message: dict, source: dict, di
             message=message,
             now=now,
         )
-        await line_client.reply_text(
-            reply_token,
-            build_photo_meal_reply(
+        messages = [{
+            "type": "text",
+            "text": build_photo_meal_reply(
                 display_name,
                 meal_type=meal_type,
                 description=image_analysis.description,
                 nutrition=image_analysis.nutrition.as_dict() if image_analysis.nutrition else None,
             ),
-        )
+        }]
+        group_id = source.get("groupId") if source.get("type") == "group" else None
+        if group_id:
+            try:
+                messages.append(build_group_history_flex_message(group_id))
+            except LiffConfigurationError:
+                logger.exception("LIFF group history is not configured")
+        await line_client.reply_messages(reply_token, messages)
         return
 
     await line_client.reply_text(reply_token, build_non_food_photo_reply(display_name, image_analysis.description))

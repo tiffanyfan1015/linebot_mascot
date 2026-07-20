@@ -30,8 +30,8 @@ class LiffServiceError(Exception):
 @dataclass(frozen=True)
 class GroupAccessTicket:
     target_id: str
-    user_id: str
-    expires_at: int
+    user_id: str | None
+    expires_at: int | None
 
 
 def create_group_access_ticket(target_id: str, user_id: str, now: int | None = None) -> str:
@@ -46,6 +46,13 @@ def create_group_access_ticket(target_id: str, user_id: str, now: int | None = N
     }
     encoded_payload = _base64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
     signature = hmac.new(secret, encoded_payload.encode("ascii"), hashlib.sha256).digest()
+    return f"{encoded_payload}.{_base64url_encode(signature)}"
+
+
+def create_permanent_group_access_ticket(target_id: str) -> str:
+    payload = {"version": 2, "kind": "group_history", "target_id": target_id}
+    encoded_payload = _base64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    signature = hmac.new(_ticket_secret(), encoded_payload.encode("ascii"), hashlib.sha256).digest()
     return f"{encoded_payload}.{_base64url_encode(signature)}"
 
 
@@ -64,14 +71,20 @@ def verify_group_access_ticket(ticket: str, now: int | None = None) -> GroupAcce
     try:
         payload = json.loads(_base64url_decode(encoded_payload).decode("utf-8"))
         target_id = payload["target_id"]
-        user_id = payload["user_id"]
-        expires_at = payload["expires_at"]
     except (KeyError, TypeError, ValueError, json.JSONDecodeError, UnicodeDecodeError):
         raise LiffAuthenticationError("Invalid access ticket") from None
 
+    version = payload.get("version")
+    if version == 2:
+        if payload.get("kind") != "group_history" or not isinstance(target_id, str) or not target_id.startswith("C"):
+            raise LiffAuthenticationError("Invalid access ticket")
+        return GroupAccessTicket(target_id=target_id, user_id=None, expires_at=None)
+
+    user_id = payload.get("user_id")
+    expires_at = payload.get("expires_at")
     current_time = int(time.time()) if now is None else now
     if (
-        payload.get("version") != 1
+        version != 1
         or not isinstance(target_id, str)
         or not target_id
         or not isinstance(user_id, str)

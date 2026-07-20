@@ -127,8 +127,17 @@ async def authenticate_liff_group_request(authorization: str, ticket: str):
     except LiffServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    if line_user_id != access.user_id:
+    if access.user_id is not None and line_user_id != access.user_id:
         raise HTTPException(status_code=403, detail="This ticket belongs to another LINE user")
+    if access.user_id is None:
+        try:
+            await line_client.get_group_member_profile(access.target_id, line_user_id)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in {400, 403, 404}:
+                raise HTTPException(status_code=403, detail="You are not a member of this LINE group") from exc
+            raise HTTPException(status_code=502, detail="LINE group membership verification failed") from exc
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail="LINE group membership verification is unavailable") from exc
     return access
 
 

@@ -19,14 +19,14 @@ class LineClient:
         self._bot_info_cache: dict | None = None
 
     async def reply_text(self, reply_token: str, text: str) -> None:
+        await self.reply_messages(reply_token, [{"type": "text", "text": text}])
+
+    async def reply_messages(self, reply_token: str, messages: list[dict]) -> None:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.post(
                 f"{LINE_API_BASE_URL}/v2/bot/message/reply",
                 headers=self._headers,
-                json={
-                    "replyToken": reply_token,
-                    "messages": [{"type": "text", "text": text}],
-                },
+                json={"replyToken": reply_token, "messages": messages},
             )
             response.raise_for_status()
 
