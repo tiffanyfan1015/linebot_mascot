@@ -7,6 +7,11 @@ import httpx
 
 from src.ai_client import AIServiceError, gemini_ai_client
 from src.handlers.reply_rules import build_rule_based_reply
+from src.liff_auth import (
+    LiffConfigurationError,
+    build_liff_group_history_url,
+    create_group_access_ticket,
+)
 from src.line_client import line_client
 from src.meal_store import meal_store
 
@@ -48,6 +53,10 @@ async def handle_event(event: dict) -> None:
         return
 
     text = message.get("text", "")
+    if text.strip() == "/飲食紀錄":
+        await handle_group_history_command(reply_token, source)
+        return
+
     rule_reply = build_rule_based_reply(text)
 
     if rule_reply:
@@ -71,6 +80,30 @@ async def handle_event(event: dict) -> None:
         return
 
     return
+
+
+async def handle_group_history_command(reply_token: str, source: dict) -> None:
+    group_id = source.get("groupId") if source.get("type") == "group" else None
+    user_id = source.get("userId")
+    if not group_id:
+        await line_client.reply_text(reply_token, "請在 LINE 群組內使用 /飲食紀錄。")
+        return
+    if not user_id:
+        await line_client.reply_text(reply_token, "目前無法確認你的 LINE 身分，請稍後再試。")
+        return
+
+    try:
+        ticket = create_group_access_ticket(group_id, user_id)
+        history_url = build_liff_group_history_url(ticket)
+    except LiffConfigurationError:
+        logger.exception("LIFF group history is not configured")
+        await line_client.reply_text(reply_token, "飲食紀錄頁面尚未完成設定，請稍後再試。")
+        return
+
+    await line_client.reply_text(
+        reply_token,
+        f"這是你查看本群組飲食紀錄的專屬連結（15 分鐘內有效）：\n{history_url}",
+    )
 
 
 async def handle_image_message(reply_token: str, message: dict, source: dict, display_name: str) -> None:

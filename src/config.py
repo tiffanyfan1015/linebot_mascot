@@ -11,6 +11,9 @@ class Settings:
         self.google_cloud_project = self._optional("GOOGLE_CLOUD_PROJECT")
         self.scheduler_secret = self._optional("SCHEDULER_SECRET")
         self.summary_timezone = self._optional("SUMMARY_TIMEZONE") or "Asia/Taipei"
+        self.liff_id = self._optional("LIFF_ID")
+        self.line_login_channel_id = self._optional("LINE_LOGIN_CHANNEL_ID")
+        self.liff_ticket_secret = self._optional("LIFF_TICKET_SECRET")
 
     @property
     def gemini_enabled(self) -> bool:

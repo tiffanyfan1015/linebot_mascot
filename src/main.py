@@ -1,11 +1,22 @@
 import json
 import logging
+from datetime import date, datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi.staticfiles import StaticFiles
 
 from src.ai_client import AIServiceError, gemini_ai_client
 from src.config import settings
 from src.handlers.webhook_handler import handle_events
+from src.liff_auth import (
+    LiffAuthenticationError,
+    LiffConfigurationError,
+    LiffServiceError,
+    verify_group_access_ticket,
+    verify_line_id_token,
+)
 from src.line_client import line_client
 from src.meal_store import meal_store
 from src.summary import (
@@ -22,6 +33,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="LINE Bot")
+app.mount("/liff", StaticFiles(directory=Path(__file__).resolve().parent / "liff", html=True), name="liff")
 
 
 @app.get("/healthz")
@@ -46,6 +58,78 @@ async def webhook(
 
     await handle_events(payload.get("events", []))
     return {"ok": True}
+
+
+@app.get("/api/liff/config")
+async def liff_config() -> dict[str, str | None]:
+    return {"liff_id": settings.liff_id}
+
+
+@app.get("/api/liff/group-meals")
+async def liff_group_meals(
+    ticket: str = Query(min_length=20, max_length=2048),
+    authorization: str = Header(default=""),
+    from_date: date | None = Query(default=None, alias="from"),
+    to_date: date | None = Query(default=None, alias="to"),
+    meal_type: str | None = Query(default=None),
+    member: str | None = Query(default=None, min_length=20, max_length=20),
+    limit: int = Query(default=50, ge=1, le=100),
+    cursor: str | None = Query(default=None),
+) -> dict:
+    access = await authenticate_liff_group_request(authorization, ticket)
+    allowed_meal_types = {"breakfast", "lunch", "dinner", "late_night"}
+    if meal_type and meal_type not in allowed_meal_types:
+        raise HTTPException(status_code=400, detail="Invalid meal_type")
+
+    today = datetime.now(ZoneInfo(settings.summary_timezone)).date()
+    selected_to_date = to_date or today
+    selected_from_date = from_date or (selected_to_date - timedelta(days=29))
+    if selected_from_date > selected_to_date:
+        raise HTTPException(status_code=400, detail="from must not be later than to")
+    if (selected_to_date - selected_from_date).days > 366:
+        raise HTTPException(status_code=400, detail="Date range cannot exceed 366 days")
+
+    try:
+        meals, next_cursor = meal_store.list_group_meals(
+            target_id=access.target_id,
+            from_date=selected_from_date.isoformat(),
+            to_date=selected_to_date.isoformat(),
+            meal_type=meal_type,
+            selected_member_key=member,
+            limit=limit,
+            cursor=cursor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "from": selected_from_date.isoformat(),
+        "to": selected_to_date.isoformat(),
+        "items": meals,
+        "next_cursor": next_cursor,
+    }
+
+
+async def authenticate_liff_group_request(authorization: str, ticket: str):
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing LINE ID token")
+    id_token = authorization.removeprefix("Bearer ").strip()
+    if not id_token:
+        raise HTTPException(status_code=401, detail="Missing LINE ID token")
+
+    try:
+        access = verify_group_access_ticket(ticket)
+        line_user_id = await verify_line_id_token(id_token)
+    except LiffConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except LiffAuthenticationError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except LiffServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    if line_user_id != access.user_id:
+        raise HTTPException(status_code=403, detail="This ticket belongs to another LINE user")
+    return access
 
 
 @app.post("/jobs/daily-summary")

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f8f3">
+  <title>群組飲食紀錄</title>
+  <link rel="stylesheet" href="/liff/styles.css">
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" defer></script>
+  <script src="/liff/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow" id="group-label">群組飲食紀錄</p>
+        <h1>今天吃了什麼</h1>
+      </div>
+      <div class="date-badge" aria-label="今天日期">
+        <span id="header-month"></span>
+        <strong id="header-day"></strong>
+      </div>
+    </header>
+
+    <div class="preview-banner" id="preview-banner" hidden>
+      <span class="status-dot" aria-hidden="true"></span>
+      預覽資料
+    </div>
+
+    <nav class="view-tabs" aria-label="紀錄檢視">
+      <button class="tab-button is-active" type="button" data-view="today" aria-selected="true">今日飲食</button>
+      <button class="tab-button" type="button" data-view="calendar" aria-selected="false">日曆紀錄</button>
+    </nav>
+
+    <main>
+      <section class="view-panel is-active" id="today-view" aria-labelledby="today-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker" id="today-date-label"></p>
+            <h2 id="today-title">今日概況</h2>
+          </div>
+          <button class="icon-button" id="refresh-button" type="button" aria-label="重新整理" title="重新整理">↻</button>
+        </div>
+
+        <div class="summary-grid" aria-label="今日統計">
+          <div class="summary-item">
+            <span>紀錄</span>
+            <strong id="meal-count">0</strong>
+            <small>餐</small>
+          </div>
+          <div class="summary-item">
+            <span>成員</span>
+            <strong id="member-count">0</strong>
+            <small>人</small>
+          </div>
+          <div class="summary-item summary-energy">
+            <span>估算熱量</span>
+            <strong id="calorie-total">0</strong>
+            <small>kcal</small>
+          </div>
+        </div>
+
+        <div class="filter-row">
+          <div class="member-filters" id="today-member-filters" aria-label="篩選群組成員"></div>
+          <label class="select-control">
+            <span class="sr-only">篩選餐次</span>
+            <select id="today-meal-filter">
+              <option value="all">全部餐次</option>
+              <option value="breakfast">早餐</option>
+              <option value="lunch">午餐</option>
+              <option value="dinner">晚餐</option>
+              <option value="late_night">宵夜</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="meal-list" id="today-meal-list"></div>
+        <div class="empty-state" id="today-empty" hidden>
+          <div class="empty-mark" aria-hidden="true">○</div>
+          <h3>今天還沒有符合的紀錄</h3>
+          <p>新的食物紀錄會出現在這裡。</p>
+        </div>
+      </section>
+
+      <section class="view-panel" id="calendar-view" aria-labelledby="calendar-title">
+        <div class="calendar-toolbar">
+          <button class="icon-button" id="previous-month" type="button" aria-label="上個月" title="上個月">‹</button>
+          <div>
+            <p class="section-kicker">飲食日曆</p>
+            <h2 id="calendar-title"></h2>
+          </div>
+          <button class="icon-button" id="next-month" type="button" aria-label="下個月" title="下個月">›</button>
+        </div>
+
+        <div class="calendar" aria-label="月份日曆">
+          <div class="weekday-row" aria-hidden="true">
+            <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+          </div>
+          <div class="calendar-grid" id="calendar-grid"></div>
+        </div>
+
+        <div class="calendar-detail">
+          <div class="section-heading detail-heading">
+            <div>
+              <p class="section-kicker" id="selected-weekday"></p>
+              <h2 id="selected-date-title"></h2>
+            </div>
+            <span class="record-count" id="selected-record-count"></span>
+          </div>
+          <div class="member-filters" id="calendar-member-filters" aria-label="篩選群組成員"></div>
+          <div class="meal-list" id="calendar-meal-list"></div>
+          <div class="empty-state compact" id="calendar-empty" hidden>
+            <div class="empty-mark" aria-hidden="true">○</div>
+            <h3>這天沒有飲食紀錄</h3>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="loading-overlay" id="loading-overlay" hidden>
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <span>讀取群組紀錄</span>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </div>
+</body>
+</html>

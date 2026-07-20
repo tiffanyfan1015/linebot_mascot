@@ -6,6 +6,13 @@ from zoneinfo import ZoneInfo
 from google.cloud import firestore
 
 from src.config import settings
+from src.liff_auth import (
+    LiffAuthenticationError,
+    create_meal_cursor,
+    member_key,
+    record_key,
+    verify_meal_cursor,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -105,6 +112,70 @@ class MealStore:
         )
         meals = [snapshot.to_dict() | {"id": snapshot.id} for snapshot in query.stream()]
         return sorted(meals, key=lambda meal: meal.get("local_time") or "")
+
+    def list_group_meals(
+        self,
+        *,
+        target_id: str,
+        from_date: str,
+        to_date: str,
+        meal_type: str | None = None,
+        selected_member_key: str | None = None,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        collection = self.client.collection(MEAL_LOGS_COLLECTION)
+        query = (
+            collection.where("target_id", "==", target_id)
+            .where("local_date", ">=", from_date)
+            .where("local_date", "<=", to_date)
+            .order_by("local_date", direction=firestore.Query.DESCENDING)
+            .order_by("local_time", direction=firestore.Query.DESCENDING)
+        )
+
+        if cursor:
+            try:
+                cursor_document_id = verify_meal_cursor(cursor, target_id)
+            except LiffAuthenticationError as exc:
+                raise ValueError(str(exc)) from exc
+            cursor_snapshot = collection.document(cursor_document_id).get()
+            cursor_data = cursor_snapshot.to_dict() if cursor_snapshot.exists else None
+            if not cursor_data or cursor_data.get("target_id") != target_id:
+                raise ValueError("Invalid pagination cursor")
+            query = query.start_after(cursor_snapshot)
+
+        matching_records: list[dict[str, Any]] = []
+        for snapshot in query.stream():
+            meal = snapshot.to_dict() or {}
+            if meal_type and meal.get("meal_type") != meal_type:
+                continue
+            record_member_key = member_key(target_id, meal.get("user_id"))
+            if selected_member_key and record_member_key != selected_member_key:
+                continue
+
+            matching_records.append(serialize_group_meal(snapshot.id, meal, record_member_key))
+            if len(matching_records) > limit:
+                break
+
+        next_cursor = create_meal_cursor(target_id, matching_records[limit - 1]["document_id"]) if len(matching_records) > limit else None
+        return [{key: value for key, value in record.items() if key != "document_id"} for record in matching_records[:limit]], next_cursor
+
+
+
+def serialize_group_meal(document_id: str, meal: dict[str, Any], record_member_key: str) -> dict[str, Any]:
+    nutrition = meal.get("nutrition")
+    return {
+        "document_id": document_id,
+        "record_key": record_key(meal.get("target_id") or "", document_id),
+        "member_key": record_member_key,
+        "display_name": meal.get("display_name") or "有人",
+        "meal_type": meal.get("meal_type") or "unknown",
+        "description": meal.get("description") or "不太清楚內容",
+        "nutrition": nutrition if isinstance(nutrition, dict) else None,
+        "local_date": meal.get("local_date"),
+        "local_time": meal.get("local_time"),
+        "timezone": meal.get("timezone") or settings.summary_timezone,
+    }
 
 
 def build_chat_target(source: dict[str, Any]) -> dict[str, Any] | None:

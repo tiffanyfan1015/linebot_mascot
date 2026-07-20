@@ -11,6 +11,8 @@ Python + FastAPI LINE Bot starter for Cloud Run.
 - Image meal replies based on Taiwan time.
 - Stores food image logs, including AI-estimated serving, calories, and macronutrients, in Firestore. Photo-based nutrition estimates are for reference only.
 - `POST /jobs/daily-summary` for scheduled LINE group meal summaries, with AI-generated daily titles and deterministic fallbacks.
+- `/飲食紀錄` issues a short-lived group history link; `GET /api/liff/group-meals` returns authenticated text-only history.
+- `/liff/` provides a mobile-first today and calendar history UI, with mock preview data until LIFF is configured.
 - Gemini AI replies when the bot is mentioned or when a message starts with `/ask`.
 - `GET /healthz` for deployment checks.
 
@@ -25,6 +27,9 @@ PORT=8080
 GOOGLE_CLOUD_PROJECT=replace-with-your-gcp-project-id
 SCHEDULER_SECRET=replace-with-a-random-secret
 SUMMARY_TIMEZONE=Asia/Taipei
+LIFF_ID=replace-after-creating-your-liff-app
+LINE_LOGIN_CHANNEL_ID=replace-after-creating-your-line-login-channel
+LIFF_TICKET_SECRET=replace-with-at-least-32-random-characters
 ```
 
 ## Optional AI Environment Variables
@@ -92,6 +97,26 @@ https://linebot-xxxxx.a.run.app/webhook
 ```
 
 Then enable `Use webhook` and click `Verify` in LINE Developers Console.
+
+
+## LIFF Group History Backend
+
+The UI is served at `/liff/`. Before a LIFF app is configured it displays local preview data; after configuration it initializes LIFF and reads authenticated group data from the API.
+
+After creating the LIFF app, set `LIFF_ID`, `LINE_LOGIN_CHANNEL_ID`, and a random `LIFF_TICKET_SECRET` of at least 32 characters. Members run `/飲食紀錄` inside a group to receive a user-bound link that expires after 15 minutes.
+
+The future LIFF page should send its LINE ID token as a bearer token:
+
+```text
+GET /api/liff/group-meals?ticket=<ticket>&from=2026-07-01&to=2026-07-31&meal_type=lunch&member=<member_key>&limit=50&cursor=<cursor>
+Authorization: Bearer <LINE ID token>
+```
+
+The API derives the group from the signed ticket and never accepts a group ID from the client. Create this Firestore composite index for history queries:
+
+```text
+meal_logs: target_id ASC, local_date DESC, local_time DESC
+```
 
 ## Security Notes
 
