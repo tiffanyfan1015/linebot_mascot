@@ -42,6 +42,10 @@ class LiffMealUpdate(BaseModel):
     meal_type: str | None = None
 
 
+class LiffTimezoneUpdate(BaseModel):
+    timezone: str = Field(min_length=1, max_length=64)
+
+
 app = FastAPI(title="LINE Bot")
 app.mount("/liff", StaticFiles(directory=Path(__file__).resolve().parent / "liff", html=True), name="liff")
 
@@ -118,6 +122,31 @@ async def liff_group_meals(
         "items": meals,
         "next_cursor": next_cursor,
     }
+
+
+@app.get("/api/liff/timezone")
+async def get_liff_timezone(
+    ticket: str = Query(min_length=20, max_length=2048),
+    authorization: str = Header(default=""),
+) -> dict[str, str | bool]:
+    _, line_user_id = await authenticate_liff_group_request(authorization, ticket)
+    timezone, confirmed = meal_store.get_user_timezone_preference(line_user_id)
+    return {"timezone": timezone, "confirmed": confirmed}
+
+
+@app.put("/api/liff/timezone")
+async def update_liff_timezone(
+    update: LiffTimezoneUpdate,
+    ticket: str = Query(min_length=20, max_length=2048),
+    authorization: str = Header(default=""),
+) -> dict[str, str | bool]:
+    _, line_user_id = await authenticate_liff_group_request(authorization, ticket)
+    timezone = update.timezone.strip()
+    try:
+        meal_store.save_user_timezone_preference(line_user_id, timezone)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid IANA timezone") from exc
+    return {"timezone": timezone, "confirmed": True}
 
 
 @app.patch("/api/liff/group-meals/{record_id}")

@@ -63,6 +63,18 @@ h1 {
   font-weight: 760;
 }
 
+.timezone-button {
+  margin-left: auto;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 h2 {
   margin: 0;
   font-size: 19px;

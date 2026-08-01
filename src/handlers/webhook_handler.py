@@ -152,16 +152,20 @@ async def handle_image_message(reply_token: str, message: dict, source: dict, di
 
     if image_analysis.is_food:
         now = datetime.now(TAIPEI_TIMEZONE)
-        meal_type = detect_meal_type(now)
+        user_id = source.get("userId")
+        timezone = get_user_timezone_safely(user_id)
+        local_now = now.astimezone(ZoneInfo(timezone))
+        meal_type = detect_meal_type(local_now)
         save_meal_log_safely(
             source=source,
-            user_id=source.get("userId"),
+            user_id=user_id,
             display_name=display_name,
             meal_type=meal_type,
             description=image_analysis.description,
             nutrition=image_analysis.nutrition.as_dict() if image_analysis.nutrition else None,
             message=message,
-            now=now,
+            now=local_now,
+            timezone=timezone,
         )
         messages = [{
             "type": "text",
@@ -326,6 +330,17 @@ def save_chat_target_safely(source: dict) -> None:
         logger.exception("Failed to save LINE chat target")
 
 
+def get_user_timezone_safely(user_id: str | None) -> str:
+    if not user_id:
+        return "Asia/Taipei"
+    try:
+        timezone, _ = meal_store.get_user_timezone_preference(user_id)
+        return timezone
+    except Exception:
+        logger.exception("Failed to load user timezone; using Asia/Taipei")
+        return "Asia/Taipei"
+
+
 def save_meal_log_safely(
     *,
     source: dict,
@@ -336,6 +351,7 @@ def save_meal_log_safely(
     nutrition: dict[str, str | int | float | None] | None,
     message: dict,
     now: datetime,
+    timezone: str,
 ) -> None:
     try:
         meal_store.save_meal_log(
@@ -347,6 +363,7 @@ def save_meal_log_safely(
             nutrition=nutrition,
             message=message,
             now=now,
+            timezone=timezone,
         )
     except Exception:
         logger.exception("Failed to save meal log")

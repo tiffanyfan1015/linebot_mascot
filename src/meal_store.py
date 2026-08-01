@@ -18,6 +18,7 @@ from src.liff_auth import (
 logger = logging.getLogger(__name__)
 MEAL_LOGS_COLLECTION = "meal_logs"
 CHAT_TARGETS_COLLECTION = "chat_targets"
+USER_TIMEZONES_COLLECTION = "user_timezones"
 
 
 class MealStore:
@@ -63,6 +64,7 @@ class MealStore:
         nutrition: dict[str, str | int | float | None] | None,
         message: dict[str, Any],
         now: datetime,
+        timezone: str,
     ) -> None:
         target = build_chat_target(source)
         if not target:
@@ -70,7 +72,7 @@ class MealStore:
             return
 
         message_id = message.get("id")
-        local_now = now.astimezone(ZoneInfo(settings.summary_timezone))
+        local_now = now.astimezone(ZoneInfo(timezone))
         document_id = str(message_id) if message_id else None
         doc_ref = (
             self.client.collection(MEAL_LOGS_COLLECTION).document(document_id)
@@ -90,8 +92,29 @@ class MealStore:
                 "line_message_id": message_id,
                 "local_date": local_now.date().isoformat(),
                 "local_time": local_now.time().replace(microsecond=0).isoformat(),
-                "timezone": settings.summary_timezone,
+                "timezone": timezone,
                 "created_at": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+
+    def get_user_timezone_preference(self, user_id: str) -> tuple[str, bool]:
+        """Return the user's confirmed IANA timezone, or the app default."""
+        snapshot = self.client.collection(USER_TIMEZONES_COLLECTION).document(user_id).get()
+        preference = snapshot.to_dict() if snapshot.exists else None
+        timezone = preference.get("timezone") if preference else None
+        if isinstance(timezone, str) and is_valid_timezone(timezone):
+            return timezone, True
+        return settings.summary_timezone, False
+
+    def save_user_timezone_preference(self, user_id: str, timezone: str) -> None:
+        if not is_valid_timezone(timezone):
+            raise ValueError("Invalid IANA timezone")
+        self.client.collection(USER_TIMEZONES_COLLECTION).document(user_id).set(
+            {
+                "user_id": user_id,
+                "timezone": timezone,
+                "updated_at": firestore.SERVER_TIMESTAMP,
             },
             merge=True,
         )
@@ -248,6 +271,14 @@ def build_chat_target(source: dict[str, Any]) -> dict[str, Any] | None:
             "room_id": room_id,
         }
     return None
+
+
+def is_valid_timezone(timezone: str) -> bool:
+    try:
+        ZoneInfo(timezone)
+    except (TypeError, ValueError, KeyError):
+        return False
+    return True
 
 
 meal_store = MealStore()

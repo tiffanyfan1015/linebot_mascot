@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -14,7 +14,7 @@ MAIN_MEAL_TYPES = {"breakfast", "lunch", "dinner"}
 def get_summary_date(now: datetime | None = None) -> str:
     timezone = ZoneInfo(settings.summary_timezone)
     local_now = (now or datetime.now(timezone)).astimezone(timezone)
-    return local_now.date().isoformat()
+    return (local_now - timedelta(days=1)).date().isoformat()
 
 
 def build_daily_summary(
@@ -59,9 +59,12 @@ def build_daily_summary(
         lines.append(f"- {display_names[user_key]}：{generated_title or choose_daily_title(records)}")
 
     lines.append("")
-    lines.append("大家今天吃了幾餐？")
+    lines.append("大家昨天吃了幾餐？")
     for user_key, records in meals_by_user.items():
         lines.append(f"- {display_names[user_key]}：{len(records)} 餐")
+
+    lines.append("")
+    lines.append("今天也請大家一起規律、健康飲食！💪")
     return "\n".join(lines)
 
 

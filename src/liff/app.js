@@ -31,6 +31,7 @@ async function initialize() {
     const config = configResponse.ok ? await configResponse.json() : {};
     if (config.liff_id && state.ticket && window.liff) {
       await initializeLiff(config.liff_id);
+      await confirmTimezoneOnFirstVisit();
       await loadInitialApiData();
     } else {
       enableMockMode();
@@ -69,6 +70,62 @@ async function loadInitialApiData() {
   rememberMembers([...todayItems, ...calendarItems]);
 }
 
+async function confirmTimezoneOnFirstVisit() {
+  const response = await fetch(`/api/liff/timezone?ticket=${encodeURIComponent(state.ticket)}`, {
+    headers: { Authorization: `Bearer ${state.idToken}` },
+  });
+  if (!response.ok) throw new Error("\u7121\u6cd5\u8b80\u53d6\u6642\u5340\u8a2d\u5b9a");
+  const preference = await response.json();
+  if (preference.confirmed) return;
+
+  const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (!detectedTimezone) return;
+
+  const confirmed = window.confirm(
+    `\u5075\u6e2c\u5230\u76ee\u524d\u6642\u5340\uff1a${detectedTimezone}\n\n\u662f\u5426\u4f7f\u7528\u9019\u500b\u6642\u5340\u5224\u65b7\u9910\u5225\uff1f`,
+  );
+  if (!confirmed) return;
+
+  const saveResponse = await fetch(`/api/liff/timezone?ticket=${encodeURIComponent(state.ticket)}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${state.idToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ timezone: detectedTimezone }),
+  });
+  if (!saveResponse.ok) {
+    const body = await saveResponse.json().catch(() => ({}));
+    throw new Error(body.detail || "\u7121\u6cd5\u5132\u5b58\u6642\u5340\u8a2d\u5b9a");
+  }
+}
+
+async function updateTimezoneFromDevice() {
+  if (state.mockMode) return;
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (!timezone) {
+    showToast("\u7121\u6cd5\u5075\u6e2c\u88dd\u7f6e\u6642\u5340");
+    return;
+  }
+  if (!window.confirm(`\u8981\u5c07 ${timezone} \u8a2d\u70ba\u76ee\u524d\u6642\u5340\u55ce\uff1f`)) return;
+
+  try {
+    const response = await fetch(`/api/liff/timezone?ticket=${encodeURIComponent(state.ticket)}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${state.idToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ timezone }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail || "\u7121\u6cd5\u5132\u5b58\u6642\u5340\u8a2d\u5b9a");
+    showToast("\u5df2\u66f4\u65b0\u6642\u5340");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 function enableMockMode() {
   state.mockMode = true;
   document.getElementById("preview-banner").hidden = false;
@@ -102,6 +159,13 @@ async function fetchAllMeals(from, to) {
 }
 
 function bindEvents() {
+  const timezoneButton = document.createElement("button");
+  timezoneButton.className = "timezone-button";
+  timezoneButton.type = "button";
+  timezoneButton.textContent = "\u66f4\u65b0\u6642\u5340";
+  timezoneButton.addEventListener("click", updateTimezoneFromDevice);
+  document.querySelector(".topbar").insertBefore(timezoneButton, document.querySelector(".date-badge"));
+
   document.querySelectorAll(".tab-button").forEach((button) => {
     button.addEventListener("click", () => switchView(button.dataset.view));
   });

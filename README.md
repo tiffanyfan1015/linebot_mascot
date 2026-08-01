@@ -14,6 +14,7 @@ Python + FastAPI LINE Bot starter for Cloud Run.
 - `/飲食紀錄` returns a persistent Flex Message button; `GET /api/liff/group-meals` verifies the signed group link, LIFF identity, and current group membership.
 - `/liff/` provides a mobile-first today and calendar history UI, with mock preview data until LIFF is configured.
 - Gemini AI replies when the bot is mentioned or when a message starts with `/ask`.
+- LIFF asks each member to confirm their device timezone on first visit; meal types and stored local timestamps use that member's confirmed timezone (default: Asia/Taipei).
 - `GET /healthz` for deployment checks.
 
 ## Required Environment Variables
@@ -132,7 +133,7 @@ Create a Cloud Scheduler HTTP job to call:
 POST https://<your-cloud-run-url>/jobs/daily-summary
 Header: x-scheduler-secret: <SCHEDULER_SECRET>
 Timezone: Asia/Taipei
-Schedule example: 30 22 * * *
+Schedule example: 0 6 * * *
 ```
 
-The job reads enabled `chat_targets` from Firestore, queries that target's `meal_logs` for the current local date, and sends the summary with LINE push messages.
+The job reads enabled `chat_targets` from Firestore, queries that target's `meal_logs` for the previous local date, and sends the summary with LINE push messages. Set the Cloud Scheduler timezone to `Asia/Taipei`.
