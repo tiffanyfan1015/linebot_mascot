@@ -303,7 +303,7 @@ def format_nutrition_estimate(nutrition: dict[str, str | int | float | None] | N
 
 
 def detect_meal_type(now: datetime) -> str:
-    current_time = now.astimezone(TAIPEI_TIMEZONE).timetz().replace(tzinfo=None)
+    current_time = now.timetz().replace(tzinfo=None)
 
     if time(6, 0) <= current_time < time(11, 0):
         return "breakfast"
