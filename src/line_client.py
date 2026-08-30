@@ -36,7 +36,8 @@ class LineClient:
     async def push_text(self, to: str, text: str) -> None:
         # A 429 can be a short-lived token-bucket limit. Keep retries bounded;
         # a monthly/target quota 429 will not be fixed by retrying forever.
-        retry_key = uuid.uuid4().hex
+        # LINE expects a UUID-formatted retry key, including hyphens.
+        retry_key = str(uuid.uuid4())
         async with httpx.AsyncClient(timeout=10) as client:
             for attempt in range(4):
                 request_headers = {**self._headers, "X-Line-Retry-Key": retry_key}
