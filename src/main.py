@@ -239,6 +239,7 @@ async def daily_summary(x_scheduler_secret: str = Header(default="")) -> dict[st
     local_date = get_summary_date()
     targets = meal_store.list_summary_targets()
     sent_count = 0
+    failed_count = 0
 
     for target in targets:
         target_id = target.get("target_id") or target.get("id")
@@ -256,7 +257,18 @@ async def daily_summary(x_scheduler_secret: str = Header(default="")) -> dict[st
                 logger.exception("Gemini daily title generation failed; using fallback titles")
 
         summary_text = build_daily_summary(local_date, meals, daily_titles)
-        await line_client.push_text(target_id, summary_text)
-        sent_count += 1
+        try:
+            await line_client.push_text(target_id, summary_text)
+        except httpx.HTTPError:
+            failed_count += 1
+            logger.exception("Daily summary push failed: target_id=%s", target_id)
+        else:
+            sent_count += 1
 
-    return {"ok": True, "date": local_date, "targets": len(targets), "sent": sent_count}
+    return {
+        "ok": failed_count == 0,
+        "date": local_date,
+        "targets": len(targets),
+        "sent": sent_count,
+        "failed": failed_count,
+    }

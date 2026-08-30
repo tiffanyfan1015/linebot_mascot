@@ -1,4 +1,7 @@
+import asyncio
 import logging
+import random
+import uuid
 
 import httpx
 
@@ -31,16 +34,45 @@ class LineClient:
             response.raise_for_status()
 
     async def push_text(self, to: str, text: str) -> None:
+        # A 429 can be a short-lived token-bucket limit. Keep retries bounded;
+        # a monthly/target quota 429 will not be fixed by retrying forever.
+        retry_key = uuid.uuid4().hex
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(
-                f"{LINE_API_BASE_URL}/v2/bot/message/push",
-                headers=self._headers,
-                json={
-                    "to": to,
-                    "messages": [{"type": "text", "text": text}],
-                },
-            )
-            response.raise_for_status()
+            for attempt in range(4):
+                request_headers = {**self._headers, "X-Line-Retry-Key": retry_key}
+                response = await client.post(
+                    f"{LINE_API_BASE_URL}/v2/bot/message/push",
+                    headers=request_headers,
+                    json={
+                        "to": to,
+                        "messages": [{"type": "text", "text": text}],
+                    },
+                )
+                if response.status_code != 429 or attempt == 3:
+                    if response.is_error:
+                        logger.error(
+                            "LINE push failed: to=%s status=%s body=%s",
+                            to,
+                            response.status_code,
+                            response.text[:500],
+                        )
+                    response.raise_for_status()
+                    return
+
+                retry_after = response.headers.get("Retry-After")
+                try:
+                    delay = float(retry_after) if retry_after else 2**attempt
+                except ValueError:
+                    delay = 2**attempt
+                delay = min(max(delay, 0.5) + random.uniform(0, 0.5), 30)
+                logger.warning(
+                    "LINE push rate-limited: to=%s attempt=%s/4 retry_in=%.1fs body=%s",
+                    to,
+                    attempt + 1,
+                    delay,
+                    response.text[:500],
+                )
+                await asyncio.sleep(delay)
 
     async def get_message_content(self, message_id: str) -> tuple[bytes, str | None]:
         async with httpx.AsyncClient(timeout=20) as client:
