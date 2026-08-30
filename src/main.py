@@ -259,6 +259,14 @@ async def daily_summary(x_scheduler_secret: str = Header(default="")) -> dict[st
         summary_text = build_daily_summary(local_date, meals, daily_titles)
         try:
             await line_client.push_text(target_id, summary_text)
+        except httpx.HTTPStatusError as exc:
+            failed_count += 1
+            logger.exception(
+                "Daily summary push failed: target_id=%s status=%s body=%s",
+                target_id,
+                exc.response.status_code,
+                exc.response.text[:1000],
+            )
         except httpx.HTTPError:
             failed_count += 1
             logger.exception("Daily summary push failed: target_id=%s", target_id)
