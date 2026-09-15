@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -43,6 +44,15 @@ class ImageAnalysis:
     is_food: bool
     description: str
     nutrition: NutritionEstimate | None = None
+    is_possible_target_backpack: bool = False
+
+
+@dataclass
+class BackpackVerification:
+    is_target_backpack: bool
+    confidence: float
+    matched_features: list[str]
+    reason: str
 
 
 class GeminiAIClient:
@@ -138,8 +148,11 @@ class GeminiAIClient:
                                 '{"is_food": boolean, "description": string, "nutrition": '
                                 '{"serving_description": string, "calories_kcal": number, '
                                 '"protein_g": number, "carbohydrates_g": number, "fat_g": number, '
-                                '"fiber_g": number} | null}. '
+                                '"fiber_g": number} | null, "is_possible_target_backpack": boolean}. '
                                 "Set is_food to true only if the image clearly shows food, a meal, or something meant to be eaten. "
+                                "Set is_possible_target_backpack to true only if the image may show a black, rounded-rectangle backpack "
+                                "with a horizontal beige/gray/black plaid zip pocket across its front and a small square logo near the upper center. "
+                                "This is only a candidate screen: when uncertain but those distinctive features may be present, set it to true. "
                                 "Write description as a short Traditional Chinese name of the food for food images, "
                                 "or a short noun phrase describing the main non-food subject otherwise. "
                                 "For food, estimate the visible portion's total nutrition, not per 100 grams. "
@@ -176,6 +189,54 @@ class GeminiAIClient:
             analysis.nutrition,
         )
         return analysis
+
+    def verify_target_backpack(self, image_bytes: bytes, mime_type: str | None) -> BackpackVerification:
+        """Strictly compare a candidate image with the checked-in target backpack reference."""
+        if not settings.gemini_api_key:
+            raise AIServiceError("Gemini API key is not configured")
+
+        reference_path = Path(__file__).resolve().parent.parent / "e-bao-bao.png"
+        try:
+            reference_bytes = reference_path.read_bytes()
+        except OSError as exc:
+            raise AIServiceError("Target backpack reference image is unavailable") from exc
+
+        detected_mime_type = mime_type or "image/jpeg"
+        encoded_image = base64.b64encode(image_bytes).decode("utf-8")
+        encoded_reference = base64.b64encode(reference_bytes).decode("utf-8")
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}"
+        )
+        payload = {
+            "contents": [{"parts": [
+                {"text": (
+                    "You are a strict visual verifier. The first image is a user submission and the second image is the reference for the target backpack. "
+                    "Decide whether the user submission visibly shows the same backpack model as the reference. "
+                    "Required distinguishing features include the black rounded-rectangle shape, the horizontal beige/gray/black plaid front zip pocket, "
+                    "and the small square logo near the upper center. Do not match a bag merely because it is black or has any plaid detail. "
+                    "If the front or distinguishing features are obscured, return false rather than guessing. "
+                    "Return JSON only: {\"is_target_backpack\": boolean, \"confidence\": number, \"matched_features\": [string], \"reason\": string}. "
+                    "confidence must be between 0 and 1; reason must be short Traditional Chinese."
+                )},
+                {"inline_data": {"mime_type": detected_mime_type, "data": encoded_image}},
+                {"inline_data": {"mime_type": "image/png", "data": encoded_reference}},
+            ]}],
+        }
+        try:
+            response = httpx.post(url, json=payload, timeout=30)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise AIServiceError("Gemini backpack verification request failed") from exc
+
+        verification = parse_backpack_verification(extract_gemini_text(response.json()))
+        logger.info(
+            "Gemini backpack verification: is_match=%s confidence=%s features=%s",
+            verification.is_target_backpack,
+            verification.confidence,
+            verification.matched_features,
+        )
+        return verification
 
 
 def extract_gemini_text(response_json: dict) -> str:
@@ -254,6 +315,25 @@ def parse_image_analysis(text: str) -> ImageAnalysis:
         is_food=parsed.get("is_food") is True,
         description=description.strip(),
         nutrition=parse_nutrition_estimate(parsed.get("nutrition")) if parsed.get("is_food") is True else None,
+        is_possible_target_backpack=parsed.get("is_possible_target_backpack") is True,
+    )
+
+
+def parse_backpack_verification(text: str) -> BackpackVerification:
+    try:
+        parsed = json.loads(strip_json_fence(text))
+    except json.JSONDecodeError:
+        return BackpackVerification(False, 0.0, [], "辨識結果格式無效")
+
+    confidence = parse_number(parsed.get("confidence")) if isinstance(parsed, dict) else None
+    raw_features = parsed.get("matched_features") if isinstance(parsed, dict) else None
+    matched_features = [item.strip() for item in raw_features if isinstance(item, str) and item.strip()] if isinstance(raw_features, list) else []
+    reason = parsed.get("reason") if isinstance(parsed, dict) else None
+    return BackpackVerification(
+        is_target_backpack=parsed.get("is_target_backpack") is True if isinstance(parsed, dict) else False,
+        confidence=min(max(float(confidence or 0.0), 0.0), 1.0),
+        matched_features=matched_features[:5],
+        reason=reason.strip() if isinstance(reason, str) and reason.strip() else "無法確認是否符合目標背包",
     )
 
 

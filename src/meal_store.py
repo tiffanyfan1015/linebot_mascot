@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 MEAL_LOGS_COLLECTION = "meal_logs"
 CHAT_TARGETS_COLLECTION = "chat_targets"
 USER_TIMEZONES_COLLECTION = "user_timezones"
+BACKPACK_SIGHTINGS_COLLECTION = "backpack_sightings"
 
 
 class MealStore:
@@ -118,6 +119,134 @@ class MealStore:
             },
             merge=True,
         )
+
+    def save_backpack_sighting(
+        self,
+        *,
+        source: dict[str, Any],
+        user_id: str | None,
+        display_name: str,
+        message: dict[str, Any],
+        confidence: float,
+        matched_features: list[str],
+        now: datetime,
+        timezone: str,
+    ) -> bool:
+        target = build_chat_target(source)
+        if not target or not user_id:
+            logger.info("Skipping backpack sighting because source or user is unavailable")
+            return False
+
+        message_id = message.get("id")
+        document_id = str(message_id) if message_id else None
+        doc_ref = (
+            self.client.collection(BACKPACK_SIGHTINGS_COLLECTION).document(document_id)
+            if document_id
+            else self.client.collection(BACKPACK_SIGHTINGS_COLLECTION).document()
+        )
+        if doc_ref.get().exists:
+            return False
+
+        local_now = now.astimezone(ZoneInfo(timezone))
+        found_at_epoch = now.timestamp()
+        doc_ref.set({
+            **target,
+            "finder_user_id": user_id,
+            "finder_display_name": display_name,
+            "line_message_id": message_id,
+            "confidence": confidence,
+            "matched_features": matched_features,
+            "status": "pending_location",
+            "location_type": None,
+            "location_text": None,
+            "location_title": None,
+            "location_address": None,
+            "latitude": None,
+            "longitude": None,
+            "found_at_epoch": found_at_epoch,
+            "location_deadline_at": found_at_epoch + 600,
+            "local_date": local_now.date().isoformat(),
+            "local_time": local_now.time().replace(microsecond=0).isoformat(),
+            "timezone": timezone,
+            "created_at": firestore.SERVER_TIMESTAMP,
+        })
+        return True
+
+    def save_pending_backpack_location_text(
+        self,
+        *,
+        source: dict[str, Any],
+        user_id: str | None,
+        location_text: str,
+        now: datetime,
+    ) -> bool:
+        sighting = self._get_pending_backpack_sighting(source, user_id, now)
+        if not sighting:
+            return False
+        sighting["reference"].update({
+            "status": "confirmed",
+            "location_type": "manual",
+            "location_text": location_text.strip(),
+            "location_updated_at": firestore.SERVER_TIMESTAMP,
+        })
+        return True
+
+    def save_pending_backpack_location_message(
+        self,
+        *,
+        source: dict[str, Any],
+        user_id: str | None,
+        message: dict[str, Any],
+        now: datetime,
+    ) -> bool:
+        sighting = self._get_pending_backpack_sighting(source, user_id, now)
+        if not sighting:
+            return False
+        sighting["reference"].update({
+            "status": "confirmed",
+            "location_type": "line_location",
+            "location_title": message.get("title"),
+            "location_address": message.get("address"),
+            "latitude": message.get("latitude"),
+            "longitude": message.get("longitude"),
+            "location_updated_at": firestore.SERVER_TIMESTAMP,
+        })
+        return True
+
+    def skip_pending_backpack_location(self, *, source: dict[str, Any], user_id: str | None, now: datetime) -> bool:
+        sighting = self._get_pending_backpack_sighting(source, user_id, now)
+        if not sighting:
+            return False
+        sighting["reference"].update({
+            "status": "confirmed",
+            "location_type": "skipped",
+            "location_updated_at": firestore.SERVER_TIMESTAMP,
+        })
+        return True
+
+    def _get_pending_backpack_sighting(
+        self,
+        source: dict[str, Any],
+        user_id: str | None,
+        now: datetime,
+    ) -> dict[str, Any] | None:
+        target = build_chat_target(source)
+        if not target or not user_id:
+            return None
+        query = (
+            self.client.collection(BACKPACK_SIGHTINGS_COLLECTION)
+            .where("target_id", "==", target["target_id"])
+            .where("finder_user_id", "==", user_id)
+            .where("status", "==", "pending_location")
+        )
+        candidates: list[dict[str, Any]] = []
+        current_timestamp = now.timestamp()
+        for snapshot in query.stream():
+            sighting = snapshot.to_dict() or {}
+            deadline = sighting.get("location_deadline_at")
+            if isinstance(deadline, (int, float)) and deadline >= current_timestamp:
+                candidates.append({**sighting, "reference": snapshot.reference})
+        return max(candidates, key=lambda item: item.get("found_at_epoch", 0), default=None)
 
     def list_summary_targets(self) -> list[dict[str, Any]]:
         query = (

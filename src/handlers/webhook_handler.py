@@ -49,10 +49,16 @@ async def handle_event(event: dict) -> None:
         await handle_image_message(reply_token, message, source, display_name)
         return
 
+    if message.get("type") == "location":
+        await handle_backpack_location_message(reply_token, message, source)
+        return
+
     if message.get("type") != "text":
         return
 
     text = message.get("text", "")
+    if await handle_backpack_location_command(reply_token, text, source):
+        return
     if text.strip() == "/飲食紀錄":
         await handle_group_history_command(reply_token, source)
         return
@@ -185,7 +191,115 @@ async def handle_image_message(reply_token: str, message: dict, source: dict, di
         await line_client.reply_messages(reply_token, messages)
         return
 
-    await line_client.reply_text(reply_token, build_non_food_photo_reply(display_name, image_analysis.description))
+    if not image_analysis.is_possible_target_backpack:
+        await line_client.reply_text(reply_token, build_non_food_photo_reply(display_name, image_analysis.description))
+        return
+
+    try:
+        verification = gemini_ai_client.verify_target_backpack(image_bytes, mime_type)
+    except AIServiceError:
+        logger.exception("Gemini target backpack verification failed")
+        return
+
+    if not verification.is_target_backpack or verification.confidence < 0.85:
+        await line_client.reply_text(reply_token, build_non_food_photo_reply(display_name, image_analysis.description))
+        return
+
+    now = datetime.now(TAIPEI_TIMEZONE)
+    user_id = source.get("userId")
+    timezone = get_user_timezone_safely(user_id)
+    try:
+        saved = meal_store.save_backpack_sighting(
+            source=source,
+            user_id=user_id,
+            display_name=display_name,
+            message=message,
+            confidence=verification.confidence,
+            matched_features=verification.matched_features,
+            now=now,
+            timezone=timezone,
+        )
+    except Exception:
+        logger.exception("Failed to save backpack sighting")
+        return
+
+    if not saved:
+        return
+
+    await line_client.reply_messages(reply_token, [build_backpack_sighting_reply(display_name)])
+
+
+def build_backpack_sighting_reply(display_name: str) -> dict:
+    return {
+        "type": "text",
+        "text": f"{display_name} 找到藝寶包了！🎒。\n要順便記錄發現地點嗎？可在 10 分鐘內補上。",
+        "quickReply": {
+            "items": [
+                {"type": "action", "action": {"type": "location", "label": "📍傳送位置"}},
+                {"type": "action", "action": {"type": "message", "label": "⌨️手動輸入", "text": "/地點"}},
+                {"type": "action", "action": {"type": "message", "label": "略過", "text": "/略過地點"}},
+            ]
+        },
+    }
+
+
+async def handle_backpack_location_command(reply_token: str, text: str, source: dict) -> bool:
+    stripped_text = text.strip()
+    if stripped_text == "/地點":
+        await line_client.reply_text(reply_token, "請輸入：/地點 地點名稱\n例如：/地點 台北車站東三門")
+        return True
+
+    if stripped_text.startswith("/地點 "):
+        location_text = stripped_text.removeprefix("/地點 ").strip()
+        if not location_text:
+            await line_client.reply_text(reply_token, "請在 /地點 後方填入地點名稱。")
+            return True
+        try:
+            saved = meal_store.save_pending_backpack_location_text(
+                source=source,
+                user_id=source.get("userId"),
+                location_text=location_text,
+                now=datetime.now(TAIPEI_TIMEZONE),
+            )
+        except Exception:
+            logger.exception("Failed to save manual backpack location")
+            await line_client.reply_text(reply_token, "地點暫時無法儲存，請稍後再試。")
+            return True
+        await line_client.reply_text(reply_token, f"{'已記錄發現地點：' + location_text if saved else '找不到 10 分鐘內待補地點的背包紀錄。'}")
+        return True
+
+    if stripped_text == "/略過地點":
+        try:
+            skipped = meal_store.skip_pending_backpack_location(
+                source=source,
+                user_id=source.get("userId"),
+                now=datetime.now(TAIPEI_TIMEZONE),
+            )
+        except Exception:
+            logger.exception("Failed to skip backpack location")
+            return True
+        if skipped:
+            await line_client.reply_text(reply_token, "好的，這次不記錄地點。")
+        return True
+
+    return False
+
+
+async def handle_backpack_location_message(reply_token: str, message: dict, source: dict) -> None:
+    try:
+        saved = meal_store.save_pending_backpack_location_message(
+            source=source,
+            user_id=source.get("userId"),
+            message=message,
+            now=datetime.now(TAIPEI_TIMEZONE),
+        )
+    except Exception:
+        logger.exception("Failed to save LINE backpack location")
+        await line_client.reply_text(reply_token, "地點暫時無法儲存，請稍後再試。")
+        return
+    if saved:
+        location_label = message.get("title") or message.get("address") or "地圖位置"
+        await line_client.reply_text(reply_token, f"已記錄發現地點：{location_label}")
 
 
 async def fetch_image_bytes(message: dict) -> tuple[bytes, str | None]:
