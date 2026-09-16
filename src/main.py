@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import date, datetime, timedelta
@@ -35,6 +36,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 MEAL_TYPES = {"breakfast", "lunch", "dinner", "late_night"}
+NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
+_nominatim_lock = asyncio.Lock()
+_nominatim_last_request = 0.0
 
 
 class LiffMealUpdate(BaseModel):
@@ -44,6 +48,13 @@ class LiffMealUpdate(BaseModel):
 
 class LiffTimezoneUpdate(BaseModel):
     timezone: str = Field(min_length=1, max_length=64)
+
+
+class LiffBackpackLocationUpdate(BaseModel):
+    label: str = Field(min_length=1, max_length=200)
+    address: str = Field(min_length=1, max_length=500)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
 
 
 app = FastAPI(title="LINE Bot")
@@ -122,6 +133,56 @@ async def liff_group_meals(
         "items": meals,
         "next_cursor": next_cursor,
     }
+
+
+@app.get("/api/liff/group-backpacks")
+async def liff_group_backpacks(
+    ticket: str = Query(min_length=20, max_length=2048), authorization: str = Header(default=""), period: str = Query(default="month")
+) -> dict:
+    access, _ = await authenticate_liff_group_request(authorization, ticket)
+    if period not in {"month", "all"}:
+        raise HTTPException(status_code=400, detail="Invalid period")
+    today = datetime.now(ZoneInfo(settings.summary_timezone)).date()
+    from_date = today.replace(day=1).isoformat() if period == "month" else None
+    data = meal_store.get_backpack_dashboard(target_id=access.target_id, from_date=from_date)
+    return {"period": period, "from": from_date, **data}
+
+
+@app.get("/api/liff/backpack-location/search")
+async def search_backpack_location(
+    q: str = Query(min_length=2, max_length=200), ticket: str = Query(min_length=20, max_length=2048), authorization: str = Header(default="")
+) -> dict:
+    await authenticate_liff_group_request(authorization, ticket)
+    global _nominatim_last_request
+    async with _nominatim_lock:
+        delay = 1.0 - (asyncio.get_running_loop().time() - _nominatim_last_request)
+        if delay > 0:
+            await asyncio.sleep(delay)
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(NOMINATIM_SEARCH_URL, params={"q": q, "format": "jsonv2", "limit": 5, "countrycodes": "tw", "accept-language": "zh-TW"}, headers={"User-Agent": "LineBot-BackpackMap/1.0"})
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail="Location search is unavailable") from exc
+        _nominatim_last_request = asyncio.get_running_loop().time()
+    results = []
+    for item in response.json():
+        try:
+            results.append({"label": item["display_name"], "address": item["display_name"], "latitude": float(item["lat"]), "longitude": float(item["lon"])})
+        except (KeyError, TypeError, ValueError):
+            continue
+    return {"items": results}
+
+
+@app.put("/api/liff/backpack-location")
+async def save_liff_backpack_location(
+    update: LiffBackpackLocationUpdate, ticket: str = Query(min_length=20, max_length=2048), authorization: str = Header(default="")
+) -> dict[str, bool]:
+    access, line_user_id = await authenticate_liff_group_request(authorization, ticket)
+    saved = meal_store.save_pending_backpack_location_picker(target_id=access.target_id, user_id=line_user_id, label=update.label, address=update.address, latitude=update.latitude, longitude=update.longitude, now=datetime.now(ZoneInfo(settings.summary_timezone)))
+    if not saved:
+        raise HTTPException(status_code=404, detail="No pending backpack sighting")
+    return {"ok": True}
 
 
 @app.get("/api/liff/timezone")

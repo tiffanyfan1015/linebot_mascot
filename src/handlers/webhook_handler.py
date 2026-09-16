@@ -9,6 +9,8 @@ from src.ai_client import AIServiceError, gemini_ai_client
 from src.handlers.reply_rules import build_rule_based_reply
 from src.liff_auth import (
     LiffConfigurationError,
+    build_liff_backpack_location_url,
+    create_group_access_ticket,
     build_liff_group_history_url,
     create_permanent_group_access_ticket,
 )
@@ -226,17 +228,24 @@ async def handle_image_message(reply_token: str, message: dict, source: dict, di
     if not saved:
         return
 
-    await line_client.reply_messages(reply_token, [build_backpack_sighting_reply(display_name)])
+    await line_client.reply_messages(reply_token, [build_backpack_sighting_reply(display_name, source, user_id)])
 
 
-def build_backpack_sighting_reply(display_name: str) -> dict:
+def build_backpack_sighting_reply(display_name: str, source: dict, user_id: str | None) -> dict:
+    manual_action: dict = {"type": "message", "label": "⌨️手動輸入", "text": "/地點"}
+    target = source.get("groupId") or source.get("roomId")
+    if target and user_id:
+        try:
+            manual_action = {"type": "uri", "label": "⌨️手動選點", "uri": build_liff_backpack_location_url(create_group_access_ticket(target, user_id))}
+        except LiffConfigurationError:
+            pass
     return {
         "type": "text",
-        "text": f"{display_name} 找到藝寶包了！🎒。\n要順便記錄發現地點嗎？可在 10 分鐘內補上。",
+        "text": f"{display_name} 找到藝寶包了🎒\n要順便記錄發現地點嗎？可在 10 分鐘內補上。",
         "quickReply": {
             "items": [
                 {"type": "action", "action": {"type": "location", "label": "📍傳送位置"}},
-                {"type": "action", "action": {"type": "message", "label": "⌨️手動輸入", "text": "/地點"}},
+                {"type": "action", "action": manual_action},
                 {"type": "action", "action": {"type": "message", "label": "略過", "text": "/略過地點"}},
             ]
         },

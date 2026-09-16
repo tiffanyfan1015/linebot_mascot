@@ -224,6 +224,36 @@ class MealStore:
         })
         return True
 
+    def save_pending_backpack_location_picker(
+        self, *, target_id: str, user_id: str, label: str, address: str, latitude: float, longitude: float, now: datetime
+    ) -> bool:
+        sighting = self._get_pending_backpack_sighting_for_target(target_id, user_id, now)
+        if not sighting:
+            return False
+        sighting["reference"].update({
+            "status": "confirmed", "location_type": "manual_picker", "location_text": label.strip(),
+            "location_address": address.strip(), "latitude": latitude, "longitude": longitude,
+            "location_updated_at": firestore.SERVER_TIMESTAMP,
+        })
+        return True
+
+    def get_backpack_dashboard(self, *, target_id: str, from_date: str | None) -> dict[str, Any]:
+        records = [snapshot.to_dict() | {"id": snapshot.id} for snapshot in self.client.collection(BACKPACK_SIGHTINGS_COLLECTION).where("target_id", "==", target_id).stream()]
+        if from_date:
+            records = [record for record in records if isinstance(record.get("local_date"), str) and record["local_date"] >= from_date]
+        totals: dict[str, dict[str, Any]] = {}
+        locations: list[dict[str, Any]] = []
+        for record in records:
+            user_id = record.get("finder_user_id")
+            if isinstance(user_id, str):
+                entry = totals.setdefault(user_id, {"user_id": user_id, "display_name": record.get("finder_display_name") or "匿名", "count": 0})
+                entry["count"] += 1
+            latitude, longitude = record.get("latitude"), record.get("longitude")
+            if isinstance(latitude, (int, float)) and isinstance(longitude, (int, float)):
+                locations.append({"finder_display_name": record.get("finder_display_name") or "匿名", "local_date": record.get("local_date"), "local_time": record.get("local_time"), "location_title": record.get("location_title") or record.get("location_text") or record.get("location_address"), "location_address": record.get("location_address"), "latitude": latitude, "longitude": longitude})
+        leaderboard = sorted(totals.values(), key=lambda item: (-item["count"], item["display_name"]))
+        return {"total_sightings": len(records), "leaderboard": leaderboard, "locations": locations}
+
     def _get_pending_backpack_sighting(
         self,
         source: dict[str, Any],
@@ -233,9 +263,12 @@ class MealStore:
         target = build_chat_target(source)
         if not target or not user_id:
             return None
+        return self._get_pending_backpack_sighting_for_target(target["target_id"], user_id, now)
+
+    def _get_pending_backpack_sighting_for_target(self, target_id: str, user_id: str, now: datetime) -> dict[str, Any] | None:
         query = (
             self.client.collection(BACKPACK_SIGHTINGS_COLLECTION)
-            .where("target_id", "==", target["target_id"])
+            .where("target_id", "==", target_id)
             .where("finder_user_id", "==", user_id)
             .where("status", "==", "pending_location")
         )

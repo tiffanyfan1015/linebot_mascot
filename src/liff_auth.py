@@ -132,6 +132,12 @@ def build_liff_group_history_url(ticket: str) -> str:
     return f"https://liff.line.me/{settings.liff_id}?ticket={ticket}"
 
 
+def build_liff_backpack_location_url(ticket: str) -> str:
+    if not settings.liff_id:
+        raise LiffConfigurationError("LIFF_ID is not configured")
+    return f"https://liff.line.me/{settings.liff_id}?ticket={ticket}&mode=backpack-location"
+
+
 def member_key(target_id: str, user_id: str | None) -> str:
     value = f"{target_id}:{user_id or 'unknown'}".encode("utf-8")
     return hashlib.sha256(value).hexdigest()[:20]

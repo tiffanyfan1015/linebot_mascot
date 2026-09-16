@@ -421,6 +421,27 @@ h3 {
 
 [hidden] { display: none !important; }
 
+.period-tabs { display: flex; gap: 8px; margin: 12px 0 18px; }
+.period-button, #location-search-form button, .location-result { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 9px 14px; color: var(--ink); font: inherit; }
+.period-button.is-active { background: var(--green); color: #fff; border-color: var(--green); }
+.backpack-stats { display: flex; align-items: baseline; gap: 6px; margin-bottom: 12px; }
+.backpack-stats strong { color: var(--green); font-size: 32px; }
+.backpack-leaderboard { list-style: none; padding: 0; margin: 0 0 26px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.backpack-leaderboard li { display: grid; grid-template-columns: 36px 1fr auto; gap: 8px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.backpack-leaderboard li:last-child { border-bottom: 0; }
+.backpack-leaderboard .rank { color: var(--green); font-weight: 700; }
+.backpack-leaderboard .empty-row { display: block; color: var(--muted); }
+.map-section { margin-top: 12px; }
+.backpack-map { height: 320px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #e8ece6; }
+.map-attribution { color: var(--muted); font-size: 11px; margin: 6px 2px; }
+.location-picker { margin-top: 26px; }
+.location-picker h2 { margin-top: 4px; }
+#location-search-form { display: flex; gap: 8px; margin: 14px 0; }
+#location-search-input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 11px; font: inherit; }
+.location-search-form button { background: var(--green); color: #fff; border-color: var(--green); }
+.location-search-results { display: grid; gap: 8px; }
+.location-result { border-radius: 10px; text-align: left; width: 100%; line-height: 1.45; }
+
 @media (min-width: 640px) {
   .app-shell { padding-left: 28px; padding-right: 28px; }
   h1 { font-size: 30px; }
