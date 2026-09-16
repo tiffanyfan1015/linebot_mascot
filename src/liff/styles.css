@@ -511,3 +511,57 @@ h1 { font-size: clamp(27px, 7vw, 34px); letter-spacing: -.025em; }
   .member-avatar { width: 34px; height: 34px; }
   .filter-chip { padding-inline: 10px; }
 }
+
+/* Keep the original meal-log visual language while retaining the new layout. */
+:root {
+  --page: #f4f5ef;
+  --surface: #ffffff;
+  --ink: #242721;
+  --muted: #70756c;
+  --line: #dfe2d8;
+  --green: #2f6b4f;
+  --green-soft: #e5efe8;
+  --coral: #d7654c;
+  --gold: #d19a35;
+  --blue: #4f729c;
+  --navy: #242721;
+  --shadow: 0 10px 30px rgba(37, 44, 35, 0.08);
+}
+.app-shell { padding: max(18px, env(safe-area-inset-top)) 18px max(36px, env(safe-area-inset-bottom)); }
+.topbar { align-items: flex-start; padding: 8px 2px 18px; }
+.eyebrow, .section-kicker { font-size: 12px; letter-spacing: 0; }
+h1 { font-size: 27px; letter-spacing: 0; }
+.date-badge { border: 1px solid var(--line); border-top: 4px solid var(--coral); border-radius: 6px; background: var(--surface); color: var(--ink); box-shadow: 0 5px 14px rgba(37, 44, 35, 0.06); }
+.date-badge span { color: var(--muted); }
+.timezone-button { border-radius: 6px; padding: 7px 9px; }
+.view-tabs { grid-template-columns: repeat(3, 1fr); gap: 0; min-height: 43px; padding: 3px; margin-bottom: 22px; border-color: var(--line); border-radius: 6px; background: #e9ece5; }
+.tab-button { display: block; min-height: 0; border-radius: 4px; font-size: 14px; }
+.tab-icon { display: none; }
+.tab-button.is-active { color: var(--ink); box-shadow: 0 2px 7px rgba(37, 44, 35, 0.08); }
+.summary-grid { border-radius: 6px; box-shadow: var(--shadow); }
+.summary-item { padding: 14px 8px; }
+.summary-item span { font-size: 11px; }
+.summary-item small { font-size: 10px; }
+.summary-item strong { font-size: 25px; }
+.icon-button, .select-control select, .filter-chip { border-radius: 6px; }
+.meal-card { border-radius: 6px; box-shadow: var(--shadow); }
+.calendar, .calendar-detail { border-radius: 6px; }
+.backpack-hero { grid-template-columns: minmax(0, 1fr) 96px; gap: 14px; margin-bottom: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.backpack-hero .section-kicker { color: var(--green); }
+.backpack-hero h2 { font-size: 19px; }
+.backpack-hero p:last-child { color: var(--muted); font-size: 13px; }
+.backpack-hero img { border-radius: 6px; transform: none; box-shadow: none; }
+.backpack-hero.is-picker { padding: 16px; }
+.period-tabs { display: flex; gap: 8px; margin: 12px 0 18px; }
+.period-button { min-height: 0; padding: 9px 14px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); text-align: center; box-shadow: none; transform: none; }
+.period-button.is-active { border-color: var(--green); background: var(--green); color: #fff; box-shadow: none; transform: none; }
+.backpack-stats { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.backpack-stats strong { font-size: 32px; }
+.backpack-leaderboard { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: none; }
+.backpack-leaderboard li { min-height: 0; padding: 12px 14px; }
+.backpack-map { height: 320px; border: 1px solid var(--line); border-radius: 6px; box-shadow: none; }
+.map-section { margin-top: 12px; margin-bottom: 30px; }
+.location-picker { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+#location-search-input { min-height: 0; border-radius: 10px; font-size: inherit; }
+#location-search-form button { min-width: 0; border-radius: 999px; background: var(--green); color: #fff; }
+.location-result { border-radius: 10px; }
