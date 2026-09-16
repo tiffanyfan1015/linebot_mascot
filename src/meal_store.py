@@ -243,16 +243,25 @@ class MealStore:
             records = [record for record in records if isinstance(record.get("local_date"), str) and record["local_date"] >= from_date]
         totals: dict[str, dict[str, Any]] = {}
         locations: list[dict[str, Any]] = []
+        sightings: list[dict[str, Any]] = []
         for record in records:
             user_id = record.get("finder_user_id")
             if isinstance(user_id, str):
                 entry = totals.setdefault(user_id, {"user_id": user_id, "display_name": record.get("finder_display_name") or "匿名", "count": 0})
                 entry["count"] += 1
+                sightings.append({
+                    "finder_user_id": user_id,
+                    "finder_display_name": record.get("finder_display_name") or "未知使用者",
+                    "local_date": record.get("local_date"),
+                    "local_time": record.get("local_time"),
+                    "location_label": record.get("location_title") or record.get("location_text") or record.get("location_address") or "未填寫地點",
+                })
             latitude, longitude = record.get("latitude"), record.get("longitude")
             if isinstance(latitude, (int, float)) and isinstance(longitude, (int, float)):
                 locations.append({"finder_display_name": record.get("finder_display_name") or "匿名", "local_date": record.get("local_date"), "local_time": record.get("local_time"), "location_title": record.get("location_title") or record.get("location_text") or record.get("location_address"), "location_address": record.get("location_address"), "latitude": latitude, "longitude": longitude})
         leaderboard = sorted(totals.values(), key=lambda item: (-item["count"], item["display_name"]))
-        return {"total_sightings": len(records), "leaderboard": leaderboard, "locations": locations}
+        sightings.sort(key=lambda item: (item.get("local_date") or "", item.get("local_time") or ""), reverse=True)
+        return {"total_sightings": len(records), "leaderboard": leaderboard, "locations": locations, "sightings": sightings}
 
     def _get_pending_backpack_sighting(
         self,

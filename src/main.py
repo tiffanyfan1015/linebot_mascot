@@ -189,8 +189,17 @@ async def save_liff_backpack_location(
     if not saved:
         raise HTTPException(status_code=404, detail="No pending backpack sighting")
     if access.target_id.startswith("C"):
+        display_name = "有人"
         try:
-            await line_client.push_messages(access.target_id, [build_backpack_dashboard_flex_message(access.target_id)])
+            profile = await line_client.get_group_member_profile(access.target_id, line_user_id)
+            display_name = profile.get("displayName") or display_name
+        except httpx.HTTPError:
+            logger.warning("Failed to resolve finder display name after LIFF location save")
+        try:
+            await line_client.push_messages(access.target_id, [
+                {"type": "text", "text": f"{display_name} 在 {update.label} 找到藝寶包！"},
+                build_backpack_dashboard_flex_message(access.target_id),
+            ])
         except (httpx.HTTPError, LiffConfigurationError):
             logger.exception("Failed to push backpack dashboard after LIFF location save")
     return {"ok": True}

@@ -566,3 +566,15 @@ h1 { font-size: 27px; letter-spacing: 0; }
 #location-search-input { min-height: 0; border-radius: 10px; font-size: inherit; }
 #location-search-form button { min-width: 0; border-radius: 999px; background: var(--green); color: #fff; }
 .location-result { border-radius: 10px; }
+.backpack-leaderboard li { display: block; padding: 0; }
+.leaderboard-member { display: grid; grid-template-columns: 36px 1fr auto; gap: 8px; align-items: center; width: 100%; min-height: 44px; padding: 12px 14px; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.leaderboard-member:active { background: #f1f4ef; }
+.member-sightings { margin: 14px 0 20px; padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.member-sightings .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.member-sightings .section-kicker { margin-bottom: 2px; color: var(--muted); }
+.member-sightings h2 { margin: 0; font-size: 18px; }
+.member-sightings-close { width: 30px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--muted); font-size: 20px; line-height: 1; }
+.member-sighting-list { display: grid; gap: 8px; }
+.member-sighting-item { padding: 10px 12px; border-left: 3px solid var(--green); background: #f4f7f2; }
+.member-sighting-item time { display: block; color: var(--muted); font-size: 13px; }
+.member-sighting-item p { margin: 4px 0 0; }

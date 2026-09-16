@@ -52,14 +52,14 @@ async def handle_event(event: dict) -> None:
         return
 
     if message.get("type") == "location":
-        await handle_backpack_location_message(reply_token, message, source)
+        await handle_backpack_location_message(reply_token, message, source, display_name)
         return
 
     if message.get("type") != "text":
         return
 
     text = message.get("text", "")
-    if await handle_backpack_location_command(reply_token, text, source):
+    if await handle_backpack_location_command(reply_token, text, source, display_name):
         return
     if text.strip() == "/飲食紀錄":
         await handle_group_history_command(reply_token, source)
@@ -279,7 +279,7 @@ def build_backpack_sighting_reply(display_name: str, source: dict, user_id: str 
     }
 
 
-async def handle_backpack_location_command(reply_token: str, text: str, source: dict) -> bool:
+async def handle_backpack_location_command(reply_token: str, text: str, source: dict, display_name: str) -> bool:
     stripped_text = text.strip()
     if stripped_text == "/地點":
         await line_client.reply_text(reply_token, "請輸入：/地點 地點名稱\n例如：/地點 台北車站東三門")
@@ -302,7 +302,7 @@ async def handle_backpack_location_command(reply_token: str, text: str, source: 
             await line_client.reply_text(reply_token, "地點暫時無法儲存，請稍後再試。")
             return True
         if saved:
-            messages = [{"type": "text", "text": f"已記錄發現地點：{location_text}"}]
+            messages = [{"type": "text", "text": f"{display_name} 在 {location_text} 找到藝寶包！"}]
             group_id = source.get("groupId") if source.get("type") == "group" else None
             if group_id:
                 try:
@@ -331,7 +331,7 @@ async def handle_backpack_location_command(reply_token: str, text: str, source: 
     return False
 
 
-async def handle_backpack_location_message(reply_token: str, message: dict, source: dict) -> None:
+async def handle_backpack_location_message(reply_token: str, message: dict, source: dict, display_name: str) -> None:
     try:
         saved = meal_store.save_pending_backpack_location_message(
             source=source,
@@ -345,7 +345,7 @@ async def handle_backpack_location_message(reply_token: str, message: dict, sour
         return
     if saved:
         location_label = message.get("title") or message.get("address") or "地圖位置"
-        messages = [{"type": "text", "text": f"已記錄發現地點：{location_label}"}]
+        messages = [{"type": "text", "text": f"{display_name} 在 {location_label} 找到藝寶包！"}]
         group_id = source.get("groupId") if source.get("type") == "group" else None
         if group_id:
             try:
