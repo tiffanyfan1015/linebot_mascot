@@ -138,6 +138,33 @@ def build_group_history_flex_message(group_id: str) -> dict:
     }
 
 
+def build_backpack_dashboard_flex_message(group_id: str) -> dict:
+    ticket = create_permanent_group_access_ticket(group_id)
+    dashboard_url = build_liff_group_history_url(ticket)
+    return {
+        "type": "flex",
+        "altText": "查看藝寶包排行榜與地圖",
+        "contents": {
+            "type": "bubble",
+            "size": "kilo",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "spacing": "sm",
+                "contents": [
+                    {"type": "text", "text": "藝寶包探索紀錄", "weight": "bold", "size": "lg", "color": "#152A38"},
+                    {"type": "text", "text": "查看排行榜、發現次數與地圖足跡", "size": "sm", "color": "#667782", "wrap": True},
+                ],
+            },
+            "footer": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [{"type": "button", "style": "primary", "color": "#0F766E", "action": {"type": "uri", "label": "查看藝寶包", "uri": dashboard_url}}],
+            },
+        },
+    }
+
+
 async def handle_image_message(reply_token: str, message: dict, source: dict, display_name: str) -> None:
     logger.info("Received LINE image message payload=%s", json.dumps(message, ensure_ascii=False))
 
@@ -274,7 +301,17 @@ async def handle_backpack_location_command(reply_token: str, text: str, source: 
             logger.exception("Failed to save manual backpack location")
             await line_client.reply_text(reply_token, "地點暫時無法儲存，請稍後再試。")
             return True
-        await line_client.reply_text(reply_token, f"{'已記錄發現地點：' + location_text if saved else '找不到 10 分鐘內待補地點的背包紀錄。'}")
+        if saved:
+            messages = [{"type": "text", "text": f"已記錄發現地點：{location_text}"}]
+            group_id = source.get("groupId") if source.get("type") == "group" else None
+            if group_id:
+                try:
+                    messages.append(build_backpack_dashboard_flex_message(group_id))
+                except LiffConfigurationError:
+                    logger.exception("LIFF backpack dashboard is not configured")
+            await line_client.reply_messages(reply_token, messages)
+        else:
+            await line_client.reply_text(reply_token, "找不到 10 分鐘內待補地點的背包紀錄。")
         return True
 
     if stripped_text == "/略過地點":
@@ -308,7 +345,14 @@ async def handle_backpack_location_message(reply_token: str, message: dict, sour
         return
     if saved:
         location_label = message.get("title") or message.get("address") or "地圖位置"
-        await line_client.reply_text(reply_token, f"已記錄發現地點：{location_label}")
+        messages = [{"type": "text", "text": f"已記錄發現地點：{location_label}"}]
+        group_id = source.get("groupId") if source.get("type") == "group" else None
+        if group_id:
+            try:
+                messages.append(build_backpack_dashboard_flex_message(group_id))
+            except LiffConfigurationError:
+                logger.exception("LIFF backpack dashboard is not configured")
+        await line_client.reply_messages(reply_token, messages)
 
 
 async def fetch_image_bytes(message: dict) -> tuple[bytes, str | None]:

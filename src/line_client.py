@@ -34,6 +34,9 @@ class LineClient:
             response.raise_for_status()
 
     async def push_text(self, to: str, text: str) -> None:
+        await self.push_messages(to, [{"type": "text", "text": text}])
+
+    async def push_messages(self, to: str, messages: list[dict]) -> None:
         # A 429 can be a short-lived token-bucket limit. Keep retries bounded;
         # a monthly/target quota 429 will not be fixed by retrying forever.
         # LINE expects a UUID-formatted retry key, including hyphens.
@@ -46,7 +49,7 @@ class LineClient:
                     headers=request_headers,
                     json={
                         "to": to,
-                        "messages": [{"type": "text", "text": text}],
+                        "messages": messages,
                     },
                 )
                 if response.status_code != 429 or attempt == 3:

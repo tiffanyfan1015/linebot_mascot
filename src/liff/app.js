@@ -190,6 +190,7 @@ function switchView(view) {
   });
   document.querySelectorAll(".view-panel").forEach((panel) => panel.classList.remove("is-active"));
   document.getElementById(`${view}-view`).classList.add("is-active");
+  document.getElementById("app-title").textContent = view === "backpack" ? "藝寶包去哪裡" : view === "calendar" ? "這個月吃了什麼" : "今天吃了什麼";
 }
 
 async function refreshCurrentData() {

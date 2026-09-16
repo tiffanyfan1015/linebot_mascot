@@ -7,12 +7,13 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from fastapi.staticfiles import StaticFiles
 
 from src.ai_client import AIServiceError, gemini_ai_client
 from src.config import settings
-from src.handlers.webhook_handler import handle_events
+from src.handlers.webhook_handler import build_backpack_dashboard_flex_message, handle_events
 from src.liff_auth import (
     LiffAuthenticationError,
     LiffConfigurationError,
@@ -64,6 +65,11 @@ app.mount("/liff", StaticFiles(directory=Path(__file__).resolve().parent / "liff
 @app.get("/healthz")
 async def healthz() -> dict[str, bool]:
     return {"ok": True}
+
+
+@app.get("/assets/e-bao-bao.png", include_in_schema=False)
+async def target_backpack_image() -> FileResponse:
+    return FileResponse(Path(__file__).resolve().parent.parent / "e-bao-bao.png", media_type="image/png")
 
 
 @app.post("/webhook")
@@ -182,6 +188,11 @@ async def save_liff_backpack_location(
     saved = meal_store.save_pending_backpack_location_picker(target_id=access.target_id, user_id=line_user_id, label=update.label, address=update.address, latitude=update.latitude, longitude=update.longitude, now=datetime.now(ZoneInfo(settings.summary_timezone)))
     if not saved:
         raise HTTPException(status_code=404, detail="No pending backpack sighting")
+    if access.target_id.startswith("C"):
+        try:
+            await line_client.push_messages(access.target_id, [build_backpack_dashboard_flex_message(access.target_id)])
+        except (httpx.HTTPError, LiffConfigurationError):
+            logger.exception("Failed to push backpack dashboard after LIFF location save")
     return {"ok": True}
 
 

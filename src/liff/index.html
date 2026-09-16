@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f7f8f3">
-  <title>群組飲食紀錄</title>
+  <meta name="theme-color" content="#F7F8FA">
+  <title>群組生活紀錄</title>
   <link rel="stylesheet" href="/liff/styles.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" defer></script>
@@ -16,8 +16,8 @@
   <div class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow" id="group-label">群組飲食紀錄</p>
-        <h1>今天吃了什麼</h1>
+        <p class="eyebrow" id="group-label">群組生活紀錄</p>
+        <h1 id="app-title">今天吃了什麼</h1>
       </div>
       <div class="date-badge" aria-label="今天日期">
         <span id="header-month"></span>
@@ -30,10 +30,10 @@
       預覽資料
     </div>
 
-    <nav class="view-tabs" aria-label="紀錄檢視">
-      <button class="tab-button is-active" type="button" data-view="today" aria-selected="true">今日飲食</button>
-      <button class="tab-button" type="button" data-view="calendar" aria-selected="false">日曆紀錄</button>
-      <button class="tab-button" type="button" data-view="backpack" aria-selected="false">藝寶包</button>
+    <nav class="view-tabs" aria-label="功能選單">
+      <button class="tab-button is-active" type="button" data-view="today" aria-selected="true"><span class="tab-icon">🍽</span><span>今天吃什麼</span></button>
+      <button class="tab-button" type="button" data-view="calendar" aria-selected="false"><span class="tab-icon">▦</span><span>飲食日曆</span></button>
+      <button class="tab-button" type="button" data-view="backpack" aria-selected="false"><span class="tab-icon">🎒</span><span>藝寶包</span></button>
     </nav>
 
     <main>
@@ -86,7 +86,10 @@
         </div>
       </section>
       <section class="view-panel backpack-view" id="backpack-view">
-        <div class="section-heading"><div><p class="section-kicker">藝寶包發現紀錄</p><h2 id="backpack-title">藝寶包排行榜</h2></div></div>
+        <div class="backpack-hero">
+          <div><p class="section-kicker">E-BAO-BAO EXPLORER</p><h2 id="backpack-title">藝寶包出沒中</h2><p>看看誰最常發現它，以及它走過哪些地方。</p></div>
+          <img src="/assets/e-bao-bao.png" alt="黑色格紋藝寶包">
+        </div>
         <div class="period-tabs"><button class="period-button is-active" data-backpack-period="month" type="button">本月</button><button class="period-button" data-backpack-period="all" type="button">全部</button></div>
         <div class="backpack-stats"><strong id="backpack-total">0</strong><span>次成功發現</span></div>
         <ol class="backpack-leaderboard" id="backpack-leaderboard"></ol>

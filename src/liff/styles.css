@@ -1,16 +1,17 @@
 :root {
   color-scheme: light;
-  --page: #f4f5ef;
+  --page: #f7f8fa;
   --surface: #ffffff;
-  --ink: #242721;
-  --muted: #70756c;
-  --line: #dfe2d8;
-  --green: #2f6b4f;
-  --green-soft: #e5efe8;
-  --coral: #d7654c;
-  --gold: #d19a35;
-  --blue: #4f729c;
-  --shadow: 0 10px 30px rgba(37, 44, 35, 0.08);
+  --ink: #172b3a;
+  --muted: #6c7a86;
+  --line: #e3e8ec;
+  --green: #0f766e;
+  --green-soft: #dff5f1;
+  --coral: #ff7a59;
+  --gold: #e9a23b;
+  --blue: #315c86;
+  --navy: #152a38;
+  --shadow: 0 14px 34px rgba(21, 42, 56, 0.09);
   font-family: Inter, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
 }
 
@@ -420,6 +421,57 @@ h3 {
 }
 
 [hidden] { display: none !important; }
+
+/* Unified food + backpack mobile dashboard */
+.app-shell { padding: max(20px, env(safe-area-inset-top)) 18px max(44px, env(safe-area-inset-bottom)); }
+.topbar { padding: 8px 2px 20px; align-items: center; }
+.eyebrow, .section-kicker { font-size: 13px; letter-spacing: .035em; }
+h1 { font-size: clamp(27px, 7vw, 34px); letter-spacing: -.025em; }
+.date-badge { border-radius: 16px; border-top-width: 0; background: var(--navy); color: #fff; box-shadow: 0 10px 24px rgba(21, 42, 56, .18); }
+.date-badge span { color: #b9c8d1; }
+.timezone-button { border-radius: 12px; padding: 9px 11px; background: #fff; }
+.view-tabs { grid-template-columns: repeat(3, 1fr); gap: 7px; min-height: 70px; padding: 6px; margin-bottom: 26px; border-color: #dde5e9; border-radius: 20px; background: #edf2f4; }
+.tab-button { display: grid; place-items: center; align-content: center; gap: 5px; min-height: 56px; border-radius: 15px; font-size: 13px; }
+.tab-button.is-active { color: var(--navy); box-shadow: 0 5px 16px rgba(21, 42, 56, .09); }
+.tab-icon { font-size: 19px; line-height: 1; }
+.summary-grid { border-radius: 20px; border-color: var(--line); box-shadow: var(--shadow); }
+.summary-item { padding-block: 18px; }
+.summary-item span { font-size: 13px; }
+.summary-item small { font-size: 12px; }
+.summary-item strong { font-size: 29px; }
+.icon-button, .select-control select, .filter-chip { border-radius: 12px; }
+.meal-card { border-radius: 18px; box-shadow: 0 8px 24px rgba(21, 42, 56, .07); }
+.calendar, .calendar-detail { border-radius: 20px; }
+
+.backpack-hero { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(112px, .72fr); gap: 18px; align-items: center; overflow: hidden; margin-bottom: 18px; padding: 22px; border-radius: 24px; background: linear-gradient(135deg, #142c3b 0%, #21485a 100%); color: #fff; box-shadow: 0 18px 38px rgba(21, 42, 56, .2); }
+.backpack-hero .section-kicker { color: #72d6c8; }
+.backpack-hero h2 { font-size: 25px; }
+.backpack-hero p:last-child { margin: 9px 0 0; color: #c7d8df; font-size: 15px; line-height: 1.55; }
+.backpack-hero img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 18px; background: #fff; transform: rotate(2deg); box-shadow: 0 12px 26px rgba(0, 0, 0, .24); }
+.period-tabs { width: fit-content; padding: 4px; border-radius: 999px; background: #e8f0f1; }
+.period-button { min-width: 76px; border: 0; }
+.period-button.is-active { box-shadow: 0 6px 14px rgba(15, 118, 110, .2); }
+.backpack-stats { padding: 16px 18px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: var(--shadow); }
+.backpack-stats strong { font-size: 38px; }
+.backpack-leaderboard { border: 0; border-radius: 20px; background: #fff; box-shadow: var(--shadow); }
+.backpack-leaderboard li { min-height: 58px; padding: 13px 16px; }
+.backpack-leaderboard li:nth-child(1) .rank { color: #d99116; font-size: 20px; }
+.backpack-leaderboard li:nth-child(2) .rank { color: #7b8994; }
+.backpack-leaderboard li:nth-child(3) .rank { color: #a6663b; }
+.backpack-map { height: 360px; border: 0; border-radius: 20px; box-shadow: var(--shadow); }
+.location-picker { padding: 22px; border: 1px solid var(--line); border-radius: 22px; background: #fff; box-shadow: var(--shadow); }
+#location-search-input { min-height: 48px; border-radius: 14px; font-size: 16px; }
+#location-search-form button { min-width: 72px; border-radius: 14px; background: var(--green); color: #fff; }
+.location-result { border-radius: 14px; padding: 13px 14px; font-size: 15px; background: #f8fafb; }
+
+@media (max-width: 420px) {
+  .app-shell { padding-inline: 14px; }
+  .view-tabs { gap: 4px; padding: 5px; }
+  .tab-button { font-size: 12px; }
+  .backpack-hero { grid-template-columns: 1fr 104px; gap: 12px; padding: 18px; }
+  .backpack-hero h2 { font-size: 22px; }
+  .backpack-hero p:last-child { font-size: 13px; }
+}
 
 .period-tabs { display: flex; gap: 8px; margin: 12px 0 18px; }
 .period-button, #location-search-form button, .location-result { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 9px 14px; color: var(--ink); font: inherit; }
