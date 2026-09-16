@@ -560,7 +560,8 @@ h1 { font-size: 27px; letter-spacing: 0; }
 .backpack-leaderboard { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: none; }
 .backpack-leaderboard li { min-height: 0; padding: 12px 14px; }
 .backpack-map { height: 320px; border: 1px solid var(--line); border-radius: 6px; box-shadow: none; }
-.map-section { margin-top: 12px; margin-bottom: 30px; }
+.map-section { margin-top: 12px; margin-bottom: 0; }
+.map-section .section-heading { margin-bottom: 10px; }
 .location-picker { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 #location-search-input { min-height: 0; border-radius: 10px; font-size: inherit; }
 #location-search-form button { min-width: 0; border-radius: 999px; background: var(--green); color: #fff; }
