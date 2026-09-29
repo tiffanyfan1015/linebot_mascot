@@ -11,6 +11,8 @@ Python + FastAPI LINE Bot starter for Cloud Run.
 - Image meal replies based on Taiwan time.
 - Stores food image logs, including AI-estimated serving, calories, and macronutrients, in Firestore. Photo-based nutrition estimates are for reference only.
 - `POST /jobs/daily-summary` for scheduled LINE group meal summaries, with AI-generated daily titles and deterministic fallbacks.
+- `POST /jobs/monthly-meal-summary` for each member's distinct breakfast, lunch, and dinner days in the previous month, plus a title based on the foods they recorded.
+- `POST /jobs/monthly-backpack-summary` for the previous month's backpack leaderboard.
 - `/飲食紀錄` returns a persistent Flex Message button; `GET /api/liff/group-meals` verifies the signed group link, LIFF identity, and current group membership.
 - `/liff/` provides a mobile-first today and calendar history UI, with mock preview data until LIFF is configured.
 - Gemini AI replies when the bot is mentioned or when a message starts with `/ask`.
@@ -137,3 +139,35 @@ Schedule example: 0 6 * * *
 ```
 
 The job reads enabled `chat_targets` from Firestore, queries that target's `meal_logs` for the previous local date, and sends the summary with LINE push messages. Set the Cloud Scheduler timezone to `Asia/Taipei`.
+
+## Monthly Summary Schedulers
+
+Create two independent Cloud Scheduler HTTP jobs. Both jobs use the previous complete calendar month in `SUMMARY_TIMEZONE` when `month` is omitted.
+
+Monthly meal summary:
+
+```text
+POST https://<your-cloud-run-url>/jobs/monthly-meal-summary
+Header: x-scheduler-secret: <SCHEDULER_SECRET>
+Timezone: Asia/Taipei
+Schedule: 0 7 1 * *
+```
+
+Monthly backpack leaderboard:
+
+```text
+POST https://<your-cloud-run-url>/jobs/monthly-backpack-summary
+Header: x-scheduler-secret: <SCHEDULER_SECRET>
+Timezone: Asia/Taipei
+Schedule: 5 7 1 * *
+```
+
+To resend a specific month, append a `month=YYYY-MM` query parameter, for example:
+
+```text
+POST /jobs/monthly-meal-summary?month=2026-09
+POST /jobs/monthly-backpack-summary?month=2026-09
+```
+
+Meal counts use distinct local dates, so multiple photos for the same meal type on one day count as one day. The two reports are sent separately and can be retried independently.
+Monthly titles use food occurrence counts. Duplicate records for the same food, meal type, and local date count once, while the same food recorded on different days increases its frequency.

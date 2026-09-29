@@ -237,10 +237,14 @@ class MealStore:
         })
         return True
 
-    def get_backpack_dashboard(self, *, target_id: str, from_date: str | None) -> dict[str, Any]:
+    def get_backpack_dashboard(
+        self, *, target_id: str, from_date: str | None, to_date: str | None = None
+    ) -> dict[str, Any]:
         records = [snapshot.to_dict() | {"id": snapshot.id} for snapshot in self.client.collection(BACKPACK_SIGHTINGS_COLLECTION).where("target_id", "==", target_id).stream()]
         if from_date:
             records = [record for record in records if isinstance(record.get("local_date"), str) and record["local_date"] >= from_date]
+        if to_date:
+            records = [record for record in records if isinstance(record.get("local_date"), str) and record["local_date"] <= to_date]
         totals: dict[str, dict[str, Any]] = {}
         locations: list[dict[str, Any]] = []
         sightings: list[dict[str, Any]] = []
@@ -306,6 +310,16 @@ class MealStore:
         )
         meals = [snapshot.to_dict() | {"id": snapshot.id} for snapshot in query.stream()]
         return sorted(meals, key=lambda meal: meal.get("local_time") or "")
+
+    def list_meals_for_range(self, target_id: str, from_date: str, to_date: str) -> list[dict[str, Any]]:
+        query = (
+            self.client.collection(MEAL_LOGS_COLLECTION)
+            .where("target_id", "==", target_id)
+            .where("local_date", ">=", from_date)
+            .where("local_date", "<=", to_date)
+        )
+        meals = [snapshot.to_dict() | {"id": snapshot.id} for snapshot in query.stream()]
+        return sorted(meals, key=lambda meal: (meal.get("local_date") or "", meal.get("local_time") or ""))
 
     def list_group_meals(
         self,

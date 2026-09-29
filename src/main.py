@@ -26,9 +26,15 @@ from src.meal_store import meal_store
 from src.summary import (
     build_daily_summary,
     build_daily_title_profiles,
+    build_monthly_backpack_summary,
+    build_monthly_meal_profiles,
+    build_monthly_meal_summary,
+    get_month_range,
     get_summary_date,
     map_daily_titles_to_users,
     public_daily_title_profiles,
+    public_monthly_title_profiles,
+    split_text_messages,
 )
 from src.security import verify_line_signature
 
@@ -310,12 +316,22 @@ async def authenticate_liff_group_request(authorization: str, ticket: str):
     return access, line_user_id
 
 
-@app.post("/jobs/daily-summary")
-async def daily_summary(x_scheduler_secret: str = Header(default="")) -> dict[str, int | bool | str]:
+def verify_scheduler_secret(x_scheduler_secret: str) -> None:
     if not settings.scheduler_secret:
         raise HTTPException(status_code=500, detail="SCHEDULER_SECRET is not configured")
     if x_scheduler_secret != settings.scheduler_secret:
         raise HTTPException(status_code=403, detail="Invalid scheduler secret")
+
+
+async def push_summary_text(target_id: str, text: str) -> None:
+    messages = [{"type": "text", "text": chunk} for chunk in split_text_messages(text)]
+    for index in range(0, len(messages), 5):
+        await line_client.push_messages(target_id, messages[index:index + 5])
+
+
+@app.post("/jobs/daily-summary")
+async def daily_summary(x_scheduler_secret: str = Header(default="")) -> dict[str, int | bool | str]:
+    verify_scheduler_secret(x_scheduler_secret)
 
     local_date = get_summary_date()
     targets = meal_store.list_summary_targets()
@@ -357,6 +373,119 @@ async def daily_summary(x_scheduler_secret: str = Header(default="")) -> dict[st
     return {
         "ok": failed_count == 0,
         "date": local_date,
+        "targets": len(targets),
+        "sent": sent_count,
+        "failed": failed_count,
+    }
+
+
+@app.post("/jobs/monthly-meal-summary")
+async def monthly_meal_summary(
+    x_scheduler_secret: str = Header(default=""),
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+) -> dict[str, int | bool | str]:
+    verify_scheduler_secret(x_scheduler_secret)
+    try:
+        month_start, month_end = get_month_range(month)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    targets = meal_store.list_summary_targets()
+    sent_count = 0
+    failed_count = 0
+    for target in targets:
+        target_id = target.get("target_id") or target.get("id")
+        if not target_id:
+            continue
+
+        meals = meal_store.list_meals_for_range(target_id, month_start, month_end)
+        profiles = build_monthly_meal_profiles(meals)
+        monthly_titles: dict[str, str] = {}
+        if profiles and gemini_ai_client.enabled:
+            try:
+                generated_titles = gemini_ai_client.generate_monthly_titles(public_monthly_title_profiles(profiles))
+                monthly_titles = map_daily_titles_to_users(profiles, generated_titles)
+            except AIServiceError:
+                logger.exception("Gemini monthly title generation failed; using fallback titles")
+
+        summary_text = build_monthly_meal_summary(month_start, profiles, monthly_titles)
+        try:
+            await push_summary_text(target_id, summary_text)
+        except httpx.HTTPStatusError as exc:
+            failed_count += 1
+            logger.exception(
+                "Monthly meal summary push failed: target_id=%s status=%s body=%s",
+                target_id,
+                exc.response.status_code,
+                exc.response.text[:1000],
+            )
+        except httpx.HTTPError:
+            failed_count += 1
+            logger.exception("Monthly meal summary push failed: target_id=%s", target_id)
+        else:
+            sent_count += 1
+
+    return {
+        "ok": failed_count == 0,
+        "month": month_start[:7],
+        "from": month_start,
+        "to": month_end,
+        "targets": len(targets),
+        "sent": sent_count,
+        "failed": failed_count,
+    }
+
+
+@app.post("/jobs/monthly-backpack-summary")
+async def monthly_backpack_summary(
+    x_scheduler_secret: str = Header(default=""),
+    month: str | None = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+) -> dict[str, int | bool | str]:
+    verify_scheduler_secret(x_scheduler_secret)
+    try:
+        month_start, month_end = get_month_range(month)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    targets = meal_store.list_summary_targets()
+    sent_count = 0
+    failed_count = 0
+    for target in targets:
+        target_id = target.get("target_id") or target.get("id")
+        if not target_id:
+            continue
+
+        data = meal_store.get_backpack_dashboard(
+            target_id=target_id,
+            from_date=month_start,
+            to_date=month_end,
+        )
+        summary_text = build_monthly_backpack_summary(
+            month_start,
+            data["leaderboard"],
+            data["total_sightings"],
+        )
+        try:
+            await push_summary_text(target_id, summary_text)
+        except httpx.HTTPStatusError as exc:
+            failed_count += 1
+            logger.exception(
+                "Monthly backpack summary push failed: target_id=%s status=%s body=%s",
+                target_id,
+                exc.response.status_code,
+                exc.response.text[:1000],
+            )
+        except httpx.HTTPError:
+            failed_count += 1
+            logger.exception("Monthly backpack summary push failed: target_id=%s", target_id)
+        else:
+            sent_count += 1
+
+    return {
+        "ok": failed_count == 0,
+        "month": month_start[:7],
+        "from": month_start,
+        "to": month_end,
         "targets": len(targets),
         "sent": sent_count,
         "failed": failed_count,
