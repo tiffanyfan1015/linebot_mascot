@@ -401,18 +401,24 @@ async def monthly_meal_summary(
         meals = meal_store.list_meals_for_range(target_id, month_start, month_end)
         profiles = build_monthly_meal_profiles(meals)
         monthly_feedback: dict[str, str] = {}
+        monthly_titles: dict[str, str] = {}
         if profiles and gemini_ai_client.enabled:
             try:
                 generated_feedback = gemini_ai_client.generate_monthly_feedback(public_monthly_feedback_profiles(profiles))
                 monthly_feedback = {
-                    profile["user_key"]: generated_feedback[profile["participant_id"]]
+                    profile["user_key"]: generated_feedback[profile["participant_id"]]["text"]
                     for profile in profiles
                     if profile["participant_id"] in generated_feedback
+                }
+                monthly_titles = {
+                    profile["user_key"]: entry["title"]
+                    for profile in profiles
+                    if (entry := generated_feedback.get(profile["participant_id"])) and entry.get("title")
                 }
             except AIServiceError:
                 logger.exception("Gemini monthly feedback generation failed; using fallback reflections")
 
-        summary_text = build_monthly_meal_summary(month_start, profiles, monthly_feedback)
+        summary_text = build_monthly_meal_summary(month_start, profiles, monthly_feedback, monthly_titles)
         try:
             await push_summary_text(target_id, summary_text)
         except httpx.HTTPStatusError as exc:

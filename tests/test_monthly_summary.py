@@ -81,8 +81,8 @@ class MonthlySummaryTests(unittest.TestCase):
             [{"user_id": "u1", "display_name": "Wayne", "meal_type": "breakfast", "local_date": "2026-09-01"}]
         )
         feedback = "這個月留下了早餐紀錄。下個月可以試著分享不同餐別的餐點。"
-        text = build_monthly_meal_summary("2026-09-01", profiles, {"u1": feedback})
-        self.assertIn(f"Wayne\n紀錄天數：", text)
+        text = build_monthly_meal_summary("2026-09-01", profiles, {"u1": feedback}, {"u1": "晨光探險家"})
+        self.assertIn("🏷️ Wayne｜晨光探險家\n📅 紀錄天數：", text)
         self.assertIn(feedback, text)
         self.assertIn("早餐 1 天・午餐 0 天・晚餐 0 天", text)
 
@@ -96,6 +96,9 @@ class MonthlySummaryTests(unittest.TestCase):
         self.assertIn("其中有咖哩飯", text)
         self.assertIn("還不足以看出整月的飲食習慣", text)
         self.assertIn("下個月可以多分享", text)
+        self.assertIn("🏷️ Amy｜米飯料理家", text)
+        self.assertIn("🏷️ Wayne｜麵食探險家", text)
+        self.assertIn("📸", text)
 
     def test_fallback_handles_unidentified_food_and_regular_records(self) -> None:
         for description, expected in [("不太清楚內容", "補上餐點名稱"), ("牛肉麵", "每週試一道")]:
