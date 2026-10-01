@@ -11,7 +11,7 @@ Python + FastAPI LINE Bot starter for Cloud Run.
 - Image meal replies based on Taiwan time.
 - Stores food image logs, including AI-estimated serving, calories, and macronutrients, in Firestore. Photo-based nutrition estimates are for reference only.
 - `POST /jobs/daily-summary` for scheduled LINE group meal summaries, with AI-generated daily titles and deterministic fallbacks.
-- `POST /jobs/monthly-meal-summary` for each member's distinct breakfast, lunch, and dinner days in the previous month, plus a title based on the foods they recorded.
+- `POST /jobs/monthly-meal-summary` for each member's distinct breakfast, lunch, and dinner recording days in the previous month, plus a personalized paragraph with a monthly reflection and a practical suggestion for next month.
 - `POST /jobs/monthly-backpack-summary` for the previous month's backpack leaderboard.
 - `/飲食紀錄` returns a persistent Flex Message button; `GET /api/liff/group-meals` verifies the signed group link, LIFF identity, and current group membership.
 - `/liff/` provides a mobile-first today and calendar history UI, with mock preview data until LIFF is configured.
@@ -170,4 +170,4 @@ POST /jobs/monthly-backpack-summary?month=2026-09
 ```
 
 Meal counts use distinct local dates, so multiple photos for the same meal type on one day count as one day. The two reports are sent separately and can be retried independently.
-Monthly titles use food occurrence counts. Duplicate records for the same food, meal type, and local date count once, while the same food recorded on different days increases its frequency.
+Monthly reflections use food occurrence counts and recording days. Duplicate records for the same food, meal type, and local date count once, while the same food recorded on different days increases its frequency. Gemini receives anonymous participant IDs, food counts, and recording-day totals, without names or LINE user IDs. Reflections treat logs as incomplete observations and do not infer skipped meals or nutritional deficiencies from missing records. Each member receives a summary and a suggestion in one paragraph; missing or invalid AI feedback falls back to a reflection based on that member's records.

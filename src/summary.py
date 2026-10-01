@@ -187,17 +187,37 @@ def build_monthly_meal_profiles(meals: list[dict[str, Any]]) -> list[dict[str, A
     )
 
 
-def public_monthly_title_profiles(profiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def public_monthly_feedback_profiles(profiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
-        {"participant_id": profile["participant_id"], "food_counts": profile.get("food_counts") or []}
+        {
+            "participant_id": profile["participant_id"],
+            "food_counts": profile.get("food_counts") or [],
+            "active_days": profile["active_days"],
+            "meal_days": {meal_type: profile[f"{meal_type}_days"] for meal_type in MEAL_ORDER},
+        }
         for profile in profiles
     ]
+
+
+def build_monthly_fallback_feedback(profile: dict[str, Any]) -> str:
+    active_days = profile["active_days"]
+    food_counts = profile.get("food_counts") or []
+    opening = f"這個月你在 {active_days} 天留下了用餐紀錄。"
+    if not food_counts:
+        return opening + "目前可辨識的食物資訊還不多，下個月可以試著記錄不同餐別，並補上餐點名稱，讓回顧更有內容。"
+    favorites = "、".join(item["name"] for item in food_counts[:3])
+    if active_days < 3:
+        return opening + f"其中有{favorites}，不過目前紀錄較少，還不足以看出整月的飲食習慣。下個月可以多分享幾天、不同餐別的餐點，慢慢累積自己的美食日記。"
+    return (
+        opening + f"其中較常出現的餐點有{favorites}，這些是你本月美食日記的一部分。"
+        "下個月可以從常吃的餐點出發，每週試一道不同食材或做法的料理，也把新嘗試記錄下來，看看自己喜歡哪些變化。"
+    )
 
 
 def build_monthly_meal_summary(
     month_start: str,
     profiles: list[dict[str, Any]],
-    monthly_titles: dict[str, str] | None = None,
+    monthly_feedback: dict[str, str] | None = None,
 ) -> str:
     month_label = format_month_label(month_start)
     lines = [f"🍽️ {month_label}用餐統計"]
@@ -205,15 +225,16 @@ def build_monthly_meal_summary(
         return "\n".join([*lines, "", "這個月還沒有用餐紀錄。"])
 
     for profile in profiles:
-        title = (monthly_titles or {}).get(profile["user_key"]) or choose_monthly_title(profile)
+        feedback = (monthly_feedback or {}).get(profile["user_key"]) or build_monthly_fallback_feedback(profile)
         lines.extend(
             [
                 "",
-                f"{profile['display_name']}｜{title}",
+                profile["display_name"],
                 (
-                    f"早餐 {profile['breakfast_days']} 天・午餐 {profile['lunch_days']} 天・"
+                    f"紀錄天數：早餐 {profile['breakfast_days']} 天・午餐 {profile['lunch_days']} 天・"
                     f"晚餐 {profile['dinner_days']} 天"
                 ),
+                feedback,
             ]
         )
     return "\n".join(lines)

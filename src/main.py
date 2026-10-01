@@ -33,7 +33,7 @@ from src.summary import (
     get_summary_date,
     map_daily_titles_to_users,
     public_daily_title_profiles,
-    public_monthly_title_profiles,
+    public_monthly_feedback_profiles,
     split_text_messages,
 )
 from src.security import verify_line_signature
@@ -400,15 +400,19 @@ async def monthly_meal_summary(
 
         meals = meal_store.list_meals_for_range(target_id, month_start, month_end)
         profiles = build_monthly_meal_profiles(meals)
-        monthly_titles: dict[str, str] = {}
+        monthly_feedback: dict[str, str] = {}
         if profiles and gemini_ai_client.enabled:
             try:
-                generated_titles = gemini_ai_client.generate_monthly_titles(public_monthly_title_profiles(profiles))
-                monthly_titles = map_daily_titles_to_users(profiles, generated_titles)
+                generated_feedback = gemini_ai_client.generate_monthly_feedback(public_monthly_feedback_profiles(profiles))
+                monthly_feedback = {
+                    profile["user_key"]: generated_feedback[profile["participant_id"]]
+                    for profile in profiles
+                    if profile["participant_id"] in generated_feedback
+                }
             except AIServiceError:
-                logger.exception("Gemini monthly title generation failed; using fallback titles")
+                logger.exception("Gemini monthly feedback generation failed; using fallback reflections")
 
-        summary_text = build_monthly_meal_summary(month_start, profiles, monthly_titles)
+        summary_text = build_monthly_meal_summary(month_start, profiles, monthly_feedback)
         try:
             await push_summary_text(target_id, summary_text)
         except httpx.HTTPStatusError as exc:
